@@ -17,14 +17,14 @@
 
 ---
 
-## P11：for / break / continue lowering
+## ✅ P11：for / break / continue lowering
 
-**现状**：`lower.go` 明确注释"for 循环（路径迭代）暂不 lowering，
-待执行层迭代原语就绪后再处理"；`*ForStmt`、`*BreakStmt`、`*ContinueStmt` 原样透传。
+**完成**：`lowerForWithCont` 实现 for→四块结构（init/cond/body/exit），
+新增 `kv.has`/`kv.at` builtin 提供 kvspace 路径遍历原语。
 
-**前置条件**：kvcpu / layoutcode 确定迭代原语语义（`iter` / `next` opcode 或 `br` 循环展开）。
-
-**标准**：
-- `for path { body }` → `while`-style `BlockStmt` 循环（`_for_cond` + `_for_body` + `_for_exit`）
-- `break` → `call _for_exit_N`
-- `continue` → `call _for_cond_N`
+**实现**：
+- `for (v in ./path) { body }` → `_for_init` + `_for_cond` + `_for_body` + `_for_exit`
+- 遍历语义：kvspace 编号子项（`./path/0`, `./path/1`, ...）
+- `break` → `call _for_exit_N`（复用 loopCtx，与 while 一致）
+- `continue` → `call _for_cond_N`（同上）
+- 前置 `kv.has`/`kv.at` builtin 已就绪（`internal/op/builtin/kvop.go`）
