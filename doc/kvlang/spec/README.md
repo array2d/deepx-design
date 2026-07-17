@@ -103,9 +103,9 @@ type[]
 list 可以与基础类型与 tensor 组合
 ## 2.控制流
 
-> **v1 整合设计**：[spec-control-flow-v1.md](spec-control-flow-v1.md) — 6 套重构方案全光谱对比 (渐进 → SSA → 编译) + SSA vs `->`/`<-` 语义对比。
-> 详细方案见 [control-flow.md](./control-flow.md)。
-> 编译器分析：[compiler-analysis-ssa-vs-arrow.md](./compiler-analysis-ssa-vs-arrow.md) — `->`/`<-` 能否替代 SSA 做编译分析 (§1-8) + 变量版本号方案 (§9) + **`resolve` 创新方案填补 φ 缺口 (§10)**。
+> **v1 整合设计**：[spec-control-flow-v1.md](../draft/spec-control-flow-v1.md) — 6 套重构方案全光谱对比 (渐进 → SSA → 编译) + SSA vs `->`/`<-` 语义对比。
+> 详细方案见 [control-flow.md](../draft/control-flow.md)、[frontend-control-flow.md](../draft/frontend-control-flow.md)。
+> 编译器分析：[compiler-analysis-ssa-vs-arrow.md](../draft/compiler-analysis-ssa-vs-arrow.md) — `->`/`<-` 能否替代 SSA 做编译分析 (§1-8) + 变量版本号方案 (§9) + **`resolve` 创新方案填补 φ 缺口 (§10)**。
 
 kvlang 支持分支与循环，控制流以“语义块”表达，执行时由解释器按块索引跳转。
 
@@ -238,7 +238,7 @@ newtensor('f32', '[128]') -> "/data/a"        # 语义反转：f32不是key，/d
 ---
 ## 5. pysdk 代码生成
 
-> 详细设计方案见 [frontend-control-flow.md](./frontend-control-flow.md) —— 当前 front/py 架构分析 + 三种方案对比 + Hybrid Eager+Defer 推荐方案 + 实现路线图。
+> 详细设计方案见 [frontend-control-flow.md](../draft/frontend-control-flow.md) —— 当前 front/py 架构分析 + 三种方案对比 + Hybrid Eager+Defer 推荐方案 + 实现路线图。
 
 核心结论：保留现有即刻发射模式不变；通过 `@kvir.compile` 装饰器新增编译模式，支持 `if`/`for`/`while` 动态控制流的 kvir 代码生成。
 
