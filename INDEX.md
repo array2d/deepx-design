@@ -55,7 +55,7 @@ kvlang-design/
 │           ├── unix-plan9-to-kvlang.md       # From Unix/Plan 9 to kvlang lineage
 │           └── use-cases.md                  # 5 major use cases (inference/training/RL/Agent/self-iteration)
 │
-├── issue/                          # Runtime issues, bug fixes, design trade-offs, agent UX
+├── issue/                          # tothink- / reject- / todo- / fix- 四前缀
 │
 ├── post/
 │   └── reddit-post.md                 # Reddit launch post draft (English)
@@ -275,7 +275,14 @@ Not suitable for: HFT / systems programming / standalone CLI / frontend Web
 
 ## 7. Issue Tracking (`issue/`)
 
-Runtime issues, bug fixes, design trade-off analyses, and agent UX issues. See individual files for details.
+4 种前缀，详见 `.claude/claude.md`：
+
+| 前缀 | 含义 |
+|------|------|
+| `tothink-` | 需要深度分析 |
+| `reject-` | 刻意不做 |
+| `todo-` | 待解决 |
+| `fix-` | 已经解决 |
 
 ---
 
@@ -340,7 +347,7 @@ DESIGN.md (root, 73 lines, 4/14 score) ← needs rewrite to 300+ lines
 
 ### 🔧 Engineering Maintenance
 - [test-checklist.md](.claude/test-checklist.md) — must-read before commit
-- [issue/index.md](issue/index.md) — known runtime issues
+- [issue/](issue/) — `tothink-` / `reject-` / `todo-` / `fix-`
 - [architecture-analysis.md](doc/kvlang/draft/architecture-analysis.md) — full codebase walkthrough
 - [dot-key-system-stack.md](doc/kvlang/draft/dot-key-system-stack.md) — system key spec
 

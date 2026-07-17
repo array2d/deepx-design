@@ -1,4 +1,4 @@
-# issue 分析：读写码约束下的设计取舍
+# Tothink: ：读写码约束下的设计取舍
 
 > 读写码 = `writes <- opcode(reads)` 或 `opcode(reads) -> writes`。
 > 每条指令显式命名所有读参和写参，无隐式栈，无匿名寄存器。
