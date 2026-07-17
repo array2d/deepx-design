@@ -55,15 +55,7 @@ kvlang-design/
 │           ├── unix-plan9-to-kvlang.md       # From Unix/Plan 9 to kvlang lineage
 │           └── use-cases.md                  # 5 major use cases (inference/training/RL/Agent/self-iteration)
 │
-├── issue/
-│   ├── index.md                       # 🔴 Runtime issue index (4 issues)
-│   ├── block_label_dispatch.md        # P0: br/goto cannot dispatch to block label
-│   ├── cli_commands_verify.md         # CLI command verification report
-│   ├── kvspace_subcommand_verify.md   # kvspace subcommand verification report
-│   ├── preamble_body_leak.md          # P0: IfStmt/WhileStmt multi-line → preamble leak
-│   ├── read-write-code-analysis.md    # Read-write code design trade-off analysis (8 items)
-│   ├── fix-*.md / reject-*.md         # Individual fix/reject issues
-│   └── 002_no_hash_map.md / 004_no_linked_list.md / 005_no_sorting.md
+├── issue/                          # Runtime issues, bug fixes, design trade-offs, agent UX
 │
 ├── post/
 │   └── reddit-post.md                 # Reddit launch post draft (English)
@@ -281,28 +273,9 @@ Not suitable for: HFT / systems programming / standalone CLI / frontend Web
 
 ---
 
-## 7. Runtime Issue Tracking (`issue/`)
+## 7. Issue Tracking (`issue/`)
 
-### [index.md](issue/index.md) — Issue Index 🔴
-4 runtime issues, fix order #1 → #2:
-| # | File | Issue |
-|---|------|-------|
-| 1 | preamble_body_leak.md | P0: IfStmt/WhileStmt multi-line → preamble leak |
-| 2 | block_label_dispatch.md | P0: block label not registered as func sig, br/goto unreachable |
-| 3 | kvspace_subcommand_verify.md | kvspace subcommand verification (verified) |
-| 4 | cli_commands_verify.md | CLI command verification (pipe/redirect hang, load not implemented) |
-
-### [read-write-code-analysis.md](issue/read-write-code-analysis.md) — 8 Design Trade-off Analyses
-| # | Category | Status |
-|---|----------|--------|
-| 001 No integer division | Missing operator | TODO |
-| 002 No nested calls | Read-write code constraint ✅ | By design |
-| 003 No break | Bug | ✅ Fixed |
-| 004 Self-assign no-op | User misuse | No fix needed |
-| 005 Array element set | set/at builtins exist; h.*key unlocks O(n) hash map | ✅ Resolved |
-| 006 Print colon parse | Scanner bug | ✅ Fixed |
-| 007 No `+=` | Read-write code design ✅ | By design |
-| 008 While compound condition | Lower missing | ✅ Fixed |
+Runtime issues, bug fixes, design trade-off analyses, and agent UX issues. See individual files for details.
 
 ---
 
