@@ -18,7 +18,7 @@
 | Del | DEL + **每层 SREM** | 1+depth | 🔴 **实测 bug**：沿全路径 SREM 把祖先索引清掉，无视兄弟存活（fix-013） |
 | DelTree | 递归 SMEMBERS+DEL | O(子树) | 非原子 |
 | List | SMEMBERS `<prefix>/.` | 1 | 目录=显式维护的每层集合 |
-| Link/Unlink | SET `"->target"` 哨兵 | 1 | 进程内 links 缓存，多实例过期（P1-5） |
+| Link/Unlink | SET `"->target"` 哨兵 | 1 | 进程内 links 缓存，多实例过期（P1-5）；删除语义=末段本体、祖先穿透（fix-014） |
 | Notify | LPUSH | 1 | 队列，无 watcher 时值滞留 |
 | Watch | BLPOP | 阻塞 | 服务端唤醒，一次 notify 恰被一个 watcher 消费 |
 

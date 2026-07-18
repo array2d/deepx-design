@@ -23,6 +23,13 @@ deepx-design/
 │   ├── LANGUAGE_SPEC.md               # 🟢 Formal language specification v0.1
 │   ├── reference/
 │   │   └── zerolang-analysis.md       # Zerolang competitive analysis
+│   ├── kvspace/
+│   │   ├── server.md                  # kvspace server design
+│   │   ├── shm.md                     # Shared memory kvspace design
+│   │   ├── hash-map.md                # kvspace path as hash map (h.*key)
+│   │   ├── typed-value.md             # TLV-encoded typed Value
+│   │   ├── rdma-distributed.md        # RDMA distributed kvspace
+│   │   └── debug-kvspace.md           # kvspace debug skill
 │   └── kvlang/
 │       ├── spec/
 │       │   ├── README.md              # kvlang language definition (meta-level)
@@ -37,8 +44,6 @@ deepx-design/
 │       │   ├── control-flow.md               # Control flow design (MLIR comparison)
 │       │   ├── dot-key-system-stack.md       # System stack "." key full audit
 │       │   ├── kvcpu-agent-debugger.md       # kvcpu Agent debugger design
-│       │   ├── kvspace-rdma-distributed.md   # kvspace RDMA distributed design
-│       │   ├── kvspace-typed-value.md        # Typed Value (vtype integration)
 │       │   ├── parser-frontend-design.md     # Compiler frontend design
 │       │   ├── repo.md                       # GitHub project optimization assessment
 │       │   ├── spec-control-flow-v1.md       # Control flow architecture analysis v1 (5 alternatives)
@@ -47,7 +52,6 @@ deepx-design/
 │       └── design/
 │           ├── array-indexing.md             # Array & multi-dimensional index design
 │           ├── deep-dive.md                  # 🟡 Deep dive: addressing model, instruction space, function semantics
-│           ├── kvspace-hash-map.md           # 🟢 kvspace path as hash map (h.*key syntax)
 │           ├── global-variables.md           # Global variables (absolute path) design
 │           ├── pointer-semantics.md          # Pointer semantics design (string vs address)
 │           ├── self-evolving-robot.md        # Self-evolving robot (ultimate scenario)
@@ -254,14 +258,25 @@ Not suitable for: HFT / systems programming / standalone CLI / frontend Web
 | [kvcpu-agent-debugger.md](doc/kvlang/draft/kvcpu-agent-debugger.md) | Agent debugger: `.debug`/`.debug.pause`/`.debug.resume` protocol |
 | [triton-gpu-integration.md](doc/kvlang/draft/triton-gpu-integration.md) | Triton/CUDA async message dispatch architecture |
 | [compile-opt-dynamic-schedule.md](doc/kvlang/draft/compile-opt-dynamic-schedule.md) | kvlang compile optimization vs Triton kernel layer: orthogonal division of labor |
-| [kvspace-rdma-distributed.md](doc/kvlang/draft/kvspace-rdma-distributed.md) | kvspace's nature: multi-component shared data plane + Raft + RDMA |
-| [kvspace-typed-value.md](doc/kvlang/draft/kvspace-typed-value.md) | TLV-encoded typed Value, unified with vtype.VType namespace |
 | [repo.md](doc/kvlang/draft/repo.md) | GitHub project 7-dimension optimization assessment |
 | [test.md](doc/kvlang/draft/test.md) | Test tooling notes |
 
 ---
 
-## 6. Competitive Analysis (`doc/reference/`)
+## 6. kvspace Docs (`doc/kvspace/`)
+
+| Document | Core Content |
+|----------|-------------|
+| [server.md](doc/kvspace/server.md) | kvspace server design |
+| [shm.md](doc/kvspace/shm.md) | Shared memory kvspace design |
+| [hash-map.md](doc/kvspace/hash-map.md) | kvspace path as hash map (h.\*key syntax) |
+| [typed-value.md](doc/kvspace/typed-value.md) | TLV-encoded typed Value, unified with vtype.VType namespace |
+| [rdma-distributed.md](doc/kvspace/rdma-distributed.md) | kvspace's nature: multi-component shared data plane + Raft + RDMA |
+| [debug-kvspace.md](doc/kvspace/debug-kvspace.md) | kvspace debug skill |
+
+---
+
+## 7. Competitive Analysis (`doc/reference/`)
 
 ### [zerolang-analysis.md](doc/reference/zerolang-analysis.md) — Zerolang Deep Dive
 **Purpose**: Analysis of zerolang (vercel-labs, 5201 stars, 1 person/2 months) and lessons for kvlang.
@@ -273,7 +288,7 @@ Not suitable for: HFT / systems programming / standalone CLI / frontend Web
 
 ---
 
-## 7. Issue Tracking (`issue/`)
+## 8. Issue Tracking (`issue/`)
 
 4 种前缀，详见 `.claude/claude.md`：
 
@@ -286,14 +301,14 @@ Not suitable for: HFT / systems programming / standalone CLI / frontend Web
 
 ---
 
-## 8. Public & Launch (`post/`)
+## 9. Public & Launch (`post/`)
 
 ### [reddit-post.md](post/reddit-post.md) — Reddit Launch Post
 English post: "KVLang: A programming language where execution state lives entirely in KV storage"
 
 ---
 
-## 9. Internal Module DESIGN Specs & Todos (`internal/`)
+## 10. Internal Module DESIGN Specs & Todos (`internal/`)
 
 ### Design Tree
 ```
@@ -325,7 +340,7 @@ DESIGN.md (root, 73 lines, 4/14 score) ← needs rewrite to 300+ lines
 
 ---
 
-## 10. Recommended Reading Paths
+## 11. Recommended Reading Paths
 
 ### 🌱 Newcomer (1-2 hours)
 1. [README.md](README.md) — understand repo structure
