@@ -1,6 +1,6 @@
-# kvlang-design Document Index
+# deepx-design Document Index
 
-> This index covers all documents in the `kvlang-design` repository, organized by directory structure. Each entry includes a summary of the document's core content and purpose.
+> This index covers all documents in the `deepx-design` repository, organized by directory structure. Each entry includes a summary of the document's core content and purpose.
 > Generated: 2026-07-17
 
 ---
@@ -8,7 +8,7 @@
 ## Directory Tree
 
 ```
-kvlang-design/
+deepx-design/
 ├── README.md                          # Repository overview
 ├── DESIGN.md                          # 🔴 Root design specification
 ├── INDEX.md                           # 📖 This file
@@ -83,7 +83,7 @@ kvlang-design/
 ### [README.md](README.md) — Repository Overview
 **Purpose**: Entry point, structure overview, and design tree introduction.
 - Directory structure diagram
-- Submodule usage: `git submodule update --init kvlang-design`
+- Submodule usage: `git submodule update --init deepx-design`
 - Design tree rule: every package implementation must conform to ancestor node constraints
 
 ### [DESIGN.md](DESIGN.md) — Root Design Specification 🔴

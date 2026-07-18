@@ -1,6 +1,6 @@
-# kvlang-design
+# deepx-design
 
-Design documentation, architecture specs, Claude project rules, and todo tracking for [kvlang](https://github.com/array2d/kvlang).
+Design documentation, architecture specs, and todo tracking for the **deepx ecosystem**. kvlang is deepx's VM — the interpreter, execution scheduler, and agent-native compute language.
 
 ## Structure
 
@@ -36,10 +36,10 @@ post/                           Blog posts and external articles
 
 ## Usage
 
-This repo is consumed as a git submodule at `kvlang-design/` inside the main [kvlang](https://github.com/array2d/kvlang) repo:
+This repo is consumed as a git submodule at `deepx-design/` inside the main [kvlang](https://github.com/array2d/kvlang) repo:
 
 ```bash
-git submodule update --init kvlang-design
+git submodule update --init deepx-design
 ```
 
 ## Design tree
