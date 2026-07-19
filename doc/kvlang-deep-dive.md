@@ -333,21 +333,25 @@ parser error 级诊断拒绝装载；kvcpu 写槽前置检查（帧 `.ro` 名单
 注：五语言按值传参均允许参数重赋值——kvlang 更严格，因为读参槽位是 IR 数据流分析的方向锚点（§2.6），
 这是 kvlang 作为单层 IR 的自我一致性要求，非行为对齐项（p7 例外，显式记录）。
 
-**推论：角色归位**。「既读又写」的变量被公理逼迫澄清身份——累加器的最终值是调用方要的 → 它是输出 → 声明为写参：
+**推论：一个参数，即使读参也是写参，那它就是写参。** 写参体内可读可写，写参角色覆盖读参。
+公理的真正作用是**逼迫签名诚实**——如果你在函数体内写了某个参数，它就不是纯输入，签名必须把它放到写参侧：
 
 ```kv
-def sum(arr) -> (acc:int) {      # acc 写参：零值起步（首读 nil=0，fix-017）、体内可读可写、return 映射
-    while (i < n) { acc + arr[i] -> acc; ... }
-}
+# ❌ 签名撒谎：acc 被写但放在读参侧 → 报错
+def sum(arr, acc:int) -> (r:int) { acc + arr[0] -> acc }
+
+# ✅ 签名诚实：acc 是写参 → 可读（首读 nil=0，fix-017）也可写
+def sum(arr) -> (acc:int) { acc + arr[0] -> acc }
 ```
 
-写参 ≡ Go 命名返回值 `func sum(arr []int) (acc int)`（五语言直系先例：零值起步、体内读写、return 带出）；
-读参只读 ≈ Fortran `intent(in)` / Ada `in`。两种累加形态都被公理导向正确写法，无需豁免：
+写参 ≡ Go 命名返回值 `func sum(arr []int) (acc int)`（零值起步、体内读写、return 带出）；
+读参只读 ≈ Fortran `intent(in)` / Ada `in`。纯工作变量（调用方不需要最终值）才拷贝局部：
 
-| 形态 | acc 角色 | 写法 |
-|------|---------|------|
-| 循环累加（单帧反复写） | 输出 → **写参** | `acc + x -> acc` 合法 |
-| 递归累加（跨帧传递） | 下层的输入 → **读参** | 本层只读：`rsum(arr, i+1, acc + arr[i]) -> r` |
+| 变量类型 | 签名位置 | 写法 |
+|---------|---------|------|
+| **累加器/输出**（调用方要最终值） | 写参 | `acc + x -> acc`（体内可读可写） |
+| **纯工作变量**（调用方不需要） | 不出现 | 首行拷贝局部：`A -> a` 后用 `a` |
+| **跨层传递**（递归下层输入） | 读参 | 本层只读：`rsum(arr, i+1, acc + arr[i]) -> r` |
 
 教学锚点：`tutorial/02-func/accumulator.kv`。
 
@@ -518,31 +522,55 @@ kvlang 不区分"跳转"和"调用"——label block 就是无参函数，控制
 - **返回 = 子树删除**（HandleReturn 清理子栈, 回传值）
 - **label block = 无参函数**，控制流统一为 call/return
 
-## 6. layoutcode 的设计原理
+## 6. layoutcode 的设计原理与函数调用 Link 机制
 
-传统编译器/VM：
+传统 VM：编译器产线性字节码，call = push 返回地址 + 跳转到函数入口。kvlang 不用字节码拷贝——**函数体永不被复制，调用 = kv.Link 创建软链**让子帧指向 `/func/` 下的指令树。
+
+### 6.1 函数调用 Link 机制
+
 ```
-编译器: AST → 线性字节码 [0x01, 0x02, 0x03, ...] → .pyc 文件
-VM:     PC=0 → 读字节码 → PC++ → 读下一字节码
+调用 add(3,4) -> s 的完整链路：
+
+编译期（load 时，WriteFunc）：
+  AST → KV 结构化写入 /func/main/add/:
+    /func/main/add/[0,0] = "+"      /func/main/add/[0,-1] = "A"
+    /func/main/add/[0,-2] = "B"     /func/main/add/[0,1] = "C"
+    /func/main/add/[1,0] = "return"
+    /func/main/add                 = "def add(A:int,B:int)->(C:int)"  (签名)
+    /func/idx/add                  = "main"                           (反向索引)
+
+调用时（HandleCall）：
+  1. FuncIdx("add") → "main"                        # 函数名 → pkg
+  2. kv.Get("/func/main/add") → 签名 → 解析参数名
+  3. frameRoot = ChildFrameRoot(callPC)              # /vthread/42/[3,0]
+  4. kv.Link("/func/main/add", frameRoot+"/.fn")     # ★ 软链：子帧代码区 → 函数指令树
+  5. 绑定参数：caller 帧取实参值 → kv.Set(frameRoot/形参名)
+  6. 写 .callpc（返回地址）、.rootfunc（函数名）、.ro（读参名单，fix-027）
+  7. 返回 frameRoot+"/.fn/[0,0]"                    # 子帧第一条指令 PC
+
+返回时（HandleReturn）：
+  1. 读 .callpc → 定位调用指令的写槽 [callPC_addr0, i+1]
+  2. 逐写槽：kv.Get(childFrame/读槽) → kv.Set(parentFrame/写槽路径)  # 写参跨帧映射
+  3. kv.Unlink(frameRoot+"/.fn")                     # 摘链
+  4. kv.DelTree(frameRoot)                          # 清整个子帧（params/.callpc/.rootfunc）
+  5. 返回 op.NextPC(callPC)                          # 父帧下一条
+
+TCO（goto/br）：不建子帧，仅 Unlink + Link 换 .fn 指向目标块（.rootfunc 保持根函数名）。
+顶层调用（Bootstrap）：无 .callpc，直接 Link funcKey → vthreadRoot/.fn。
 ```
 
-kvlang layoutcode：
-```
-layoutcode: AST → KV 结构化 key-value:
-  /src/func/add/[0,0] = "+"
-  /src/func/add/[0,-1] = "A"
-  /src/func/add/[0,1] = "C"
+### 6.2 与传统 VM 的关键差异
 
-  /src/func/branch/entry/[0,0] = "+"
-  /src/func/branch/entry/[0,-1] = "X"
-  /src/func/branch/then/[0,0] = "*"
+| | 传统 VM | kvlang |
+|--|---------|--------|
+| 代码传递 | copy 字节码到新栈帧 | **Link 软链**（所有帧共享 /func/ 下同一份指令树） |
+| TCO | 需特殊优化（复用帧 + 重定向参数） | Unlink + Link，已有的 .fn 机制天然支持 |
+| 崩溃恢复 | 栈帧在内存，进程死即全失 | PC=路径字符串、`.callpc`=返回点落 KV——重启续跑 |
+| 可观测 | 需调试器 attach | `kvspace dump /vthread/…` 看 `.fn` 链向谁、`.callpc` 在哪个坐标 |
 
-VM:
-  PC="[0,0]" → kv.Get("/vthread/tid/[0,0]") → "+"
-  PC="[0,0]/entry/[0,0]" → kv.Get("/vthread/tid/[0,0]/entry/[0,0]") → "+"
-```
-
-KV 树的每个节点天然支持层级命名，无需构建跳转表或符号表。
+**`=` 操作码是值拷贝，不是函数调用**：`a -> b` 编码为 `[s0,0]="="`（值拷贝），
+函数调用是 `call(name, args…) → writes`——opcode 位是 `call`，Link 发生在 HandleCall 内部。
+二者在 KV 层无歧义，opcode 位永远不放变量引用（§2.3）。
 
 ## 7. 设计决策总结
 
@@ -596,6 +624,8 @@ kvlang 没有 `&` 取址运算符——**代码中对象的变量名，本身就
 `/func/` 下的函数模板中只有相对指针，因此天然可重入：每次调用创建不同的帧路径，同一份相对指针拼接出互不干扰的绝对指针——递归、TCO 无需任何额外机制。
 
 这解释了为什么全局变量 `/counter` 零成本——绝对指针不经过帧前缀拼接。也解释了为什么数组能作为参数传递——`flattenNestedCalls` 将 `[1,2,3]` 展开为临时变量，再将临时变量（持有 XValue）作为普通参数传递。
+
+**参数不得同名（fix-032）**：变量名即指针——同一帧内两个同名参数将指向同一个 kvspace 位置。读参列表内部、写参列表内部、以及读写列表之间均不可同名。`def f(A:int) -> (A:int)` 签名本身非法——A 不能同时是读参和写参。parser `checkParamDup` 阻断源码路径，VM `checkDupParams` 兜底 agent 直写 KV 构造的非法签名。error_case 锚点：`tutorial/error_cases/read_only/dup_param.kv`。
 
 ## 9. XValue 的 kind 系统与数字类型算子
 
