@@ -74,27 +74,31 @@ kvspace 存储两类数据：**基础数据类型**（int、float、bool、strin
 
 ### 0.6 文件结构、import 与 lib 命名空间（fix-033/034/035）
 
-.kv 文件可划分为四区，`import` / `lib` 均位于 `def`/顶层调用之前。文件名模糊化——`import "lib"` 自动找 `lib.kv`，不带引号的 `import lib` 是纯 kvspace 包引用。
+**跨机器架构**：`import` 是纯 kvspace 断言，**绝不触碰文件系统**。kvlang run 进程在某台机器，被 import 的代码
+可能在另一台机器的 Redis 里——`import math` 只检查 `/lib/math/` 在 kvspace 中是否就绪。
+只有用户显式执行的 `kvlang run/load <file|dir>` 命令有文件系统访问权。
+
+- `kvlang run a.kv b.kv` → 用户指定全部源文件，先全部 load 入 kvspace，再执行 init
+- `kvlang load dir/` → 递归收集目录下全部 `.kv` 文件，仅装载不执行
+- `kvlang run lib.kv`（lib.kv 无顶层调用）→ **等同 load**，函数入 `/lib/`，进程退出
+- `import math` 在源码中 → **文档级声明**，不触发文件查找。运行时若 `/lib/math/` 为空，NameError 自然触发
 
 ```kv
-import "mylib"                # 引号 = 文件糖：自动找 mylib.kv，加载后注册到 /lib/<pkg>/
-import math                   # 裸名 = kvspace 引用：断言 /lib/math/ 已就绪
+import math                   # 文档级声明：期望 /lib/math/ 已就绪
 import "aaa/bbb" as c         # as 别名：c.func() 在 parse 期还原为 aaa/bbb.func()（fix-035）
 
-lib math {                    # 命名空间块：函数注册到 /lib/math/
-    def add(A:int, B:int) -> (C:int) { … }
+lib math {                    # 命名空间块：函数注册为 /lib/math.sum, /lib/math.twice …
+    def sum(A:int, B:int) -> (C:int) { A + B -> C }
 }
 
 def legacy() -> () { … }     # 无 lib 的 def：注册到 /lib/<name>（parser warning）
-
-init { … }                   # 可选初始化块，import 全部完成后执行
 ```
 
-- `import` 递归加载，已加载文件自动跳过（Python 式去重）
-- `lib name { }` 借鉴 C++ `namespace` / Rust `mod`，函数注册到 `/lib/<name>/`；`lib` 做包名触发 warning（展开为 `/lib/lib/`）
-- 无 lib 的 def 注册到 `/lib/<name>` 直下，parser 建议包裹 `lib pkgname { }`
-- `as` 别名在 dotted call 时还原为全路径——`c.add(3,4)` 解析为 `aaa/bbb.add(3,4)`，`LibIdx` 以全路径查 pkg
-- 源码存储：`WriteFunc` 写入 `/lib/<pkg>/<name>.src`（fix-034），与指令树同目录
+- `lib name { }` 借鉴 C++ `namespace` / Rust `mod`，包名与函数名以 `.` 分隔：`/lib/<pkg>.<name>`
+- 无 lib 的 def 直放 `/lib/<name>`（无 `.`），parser 建议包裹 `lib pkgname { }`
+- `as` 别名在 dotted call 时还原为全路径——`c.add(3,4)` 解析为 `aaa/bbb.add(3,4)`
+- 源码存储：`WriteFunc` 写入 `/lib/<pkg>.<name>.src`（fix-034），与指令树同目录
+- **目录名/文件名不参与包命名**——仅 `lib name { }` 声明包名
 
 ### 0.4 模块职责
 
