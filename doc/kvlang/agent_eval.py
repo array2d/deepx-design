@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""agent_eval — 以 deep-dive.md 为教学文档，验证空记忆模型对 kvlang 的理解正确率。
+"""agent_eval — 以 deep-dive.md 为教学文档，验证空记忆模型对 kvlang 设计实现的理解。
 
 用法:
   export KVLANG_EVAL_API_BASE=https://...   # OpenAI 兼容 API base（不含 /v1）
@@ -7,87 +7,102 @@
   export KVLANG_EVAL_MODEL=qwen3.7-plus     # 可选
   python3 doc/kvlang/agent_eval.py
 
-对每个任务：deep-dive.md + 任务描述 → LLM 生成 kvlang 代码 → 实际运行 → stdout 比对。
-生成代码与失败详情保存于 /tmp/agent_eval/。
+对每个任务：deep-dive.md + 设计问题 → LLM 用自己的话回答 → 与 kvlang 实际实现对比。
+回答保存于 /tmp/agent_eval/answers/。
 """
 from __future__ import annotations
-import json, os, re, subprocess, sys, urllib.request, uuid
+import json, os, re, sys, urllib.request, uuid
 from pathlib import Path
 
-ROOT = Path("/home/peng.li24/github.com/array2d/kvlang")
-KV = str(ROOT / "kvlang")
 DOC = Path(__file__).resolve().parent / "deep-dive.md"
 OUT = Path("/tmp/agent_eval")
+ANSWER_DIR = OUT / "answers"
 
 API_BASE = os.environ.get("KVLANG_EVAL_API_BASE", "").rstrip("/")
 API_KEY  = os.environ.get("KVLANG_EVAL_API_KEY", "")
 MODEL    = os.environ.get("KVLANG_EVAL_MODEL", "qwen3.7-plus")
 
-# (任务名, 任务描述, 期望 stdout 行)
-# 覆盖 deep-dive.md 核心概念：rwir、无返回值/写参、多写参、只读参、lib、init、dict、.
-TASKS = [
-    ("write_param",
-     "声明一个函数 add，签名包含两个读参 A:int 和 B:int，一个写参 C:int。函数体计算 A+B 并写入 C。调用 add(3,4) 将结果映射到局部变量 s，打印 s。",
-     ["7"]),
+SYSTEM = """你是 kvlang 架构评审员。你刚阅读了 kvlang 的 deep-dive.md 设计文档。
+现在用你自己的话回答问题。如果文档对某个点没有说明或说得不清楚，请明确指出。
+不要套用其它语言的默认假设——严格按照文档中的描述推理。"""
 
-    ("multi_write",
-     "声明一个函数 double_triple，签名包含一个读参 n:int，两个写参 d:int 和 t:int。函数体计算 n*2→d, n*3→t。调用 double_triple(5) 将结果映射到 a 和 b，分两行打印 a 和 b。",
-     ["10", "15"]),
+# (任务名, 问题) — 覆盖 deep-dive 核心设计点，每个问题对应 kvlang 实际实现的关键决策
+QUESTIONS = {
+    "01_rwir_model": """
+kvlang 称"函数没有返回值"。请用你自己的话解释：
+1. 既然没有返回值，调用 add(3,4) -> s 中的 -> s 是什么意思？
+2. 如果 add 有两个写参，调用方怎么写？
+3. 这和 Go 的 `func add(a, b int) int` + `s := add(3,4)` 在设计思路上有什么根本区别？
+""",
 
-    ("readonly_param",
-     "声明一个函数 f，签名有一个读参 X:int，无写参。函数体内计算 X+1 后写入局部变量 r（不要写读参 X）。调用 f(41) 映射到 result，打印 result。",
-     ["42"]),
+    "02_instruction_slot": """
+kvlang 指令在 KV 树中占据二维坐标 [s0,s1]。请回答：
+1. [s0,0]、[s0,-1]、[s0,1] 分别存什么？
+2. 为什么用负数表示读参、正数表示写参？
+3. Decode 指令时怎么知道这条指令有多少个读参和写参？
+""",
 
-    ("init_block",
-     "在 init { } 块中，初始化 total=0，i=1，用 while 循环 i<=5 每次 total+i→total 且 i+1→i。循环结束后打印 total。不写 def main，直接用 init 块。",
-     ["15"]),
+    "03_call_link": """
+kvlang 的函数调用不是"把指令复制到子帧"，而是"软链接"。请回答：
+1. HandleCall 的核心操作是什么？（写出关键步骤，不需要记具体函数名）
+2. 同一条函数被多个 vthread 同时调用，它们是否共享同一份指令树？为什么？
+3. TCO（尾调用优化）为什么在 Link 机制下特别简单？
+""",
 
-    ("dict_literal",
-     "用 {} 字面量创建 dict d = { name=\"kv\"; ver=1 }。分两行打印 d.name 和 d.ver。",
-     ["kv", "1"]),
+    "04_readonly_param": """
+文档 §3.2 有"读参只读公理"。请回答：
+1. `def f(A: int) -> () { 42 -> A }` 会通过编译吗？为什么？
+2. 如果我想在函数体内修改一个从调用方传入的值然后返回，正确的签名应该怎么写？
+3. 这个设计在崩溃恢复场景下有什么好处？
+""",
 
-    ("if_else",
-     "判断 42 是否能被 7 整除（用 % 取余，比较余数是否等于 0）。是则打印 yes，否则打印 no。",
-     ["yes"]),
+    "05_local_variable": """
+kvlang 的局部变量是裸名（不再用 ./ 前缀）。请回答：
+1. `A + B -> C` 中，A、B、C 分别是哪种 slot？
+2. 局部变量 C 的 kvspace 路径是怎么构成的？
+3. "变量名即指针"是什么意思？这解释了为什么不需要 `&` 取址？
+""",
 
-    ("while_sum",
-     "用 while 循环计算 1 到 10 的累加和，循环变量 i 自行管理，结果存入 s，打印 55。",
-     ["55"]),
+    "06_lib_namespace": """
+文档 §0.6 介绍了 lib 命名空间。请回答：
+1. `lib math { def sum(A,B)->(C) {...} }` 后，sum 在 kvspace 中存成什么路径？
+2. 调用 sum 时用什么名字？是 `sum(3,4)` 还是 `math.sum(3,4)`？
+3. 无 lib 包裹的 def 会发生什么？
+""",
 
-    ("dual_arrow",
-     "分别用 -> 和 <- 两种形态：先计算 3*4→r 打印 r；再 s <- 5*6 打印 s。注意每种形态写槽位置不同。用 -> 时写槽在右侧，用 <- 时写槽在左侧。",
-     ["12", "30"]),
+    "07_write_slot_rules": """
+写槽有严格的规则。请回答：
+1. 哪些东西可以作为写槽？（列举三种合法形态）
+2. 哪些不能？（列举两种非法形态）
+3. `=` 和 `->` 在语义上有什么关系？
+""",
 
-    ("number_type_cast",
-     "用 int8 算子将 300 转换为 int8 类型，存入 v，打印 v 的值。",
-     ["44"]),
+    "08_kv_function_storage": """
+函数编译后存到 kvspace。请回答：
+1. 函数体指令存在哪个 KV 域下？路径格式是什么？
+2. 函数名到包的映射存在哪里？
+3. 运行时调用函数，kxvpu 怎么找到函数体？
+""",
 
-    ("string_concat",
-     "把字符串 'hello' 和 ' world' 拼接后存入 g，打印 g。",
-     ["hello world"]),
+    "09_param_dedup": """
+文档 §8 提到"参数不得同名"。请回答：
+1. `def f(A:int) -> (A:int)` 这个签名为什么非法？
+2. `def g(A:int, B:int) -> (C:int)` 中，函数体内写 `B -> C` 是否合法？为什么？
+3. 断点后重启续跑时，读参不变性保证了什么？
+""",
 
-    ("fib_recursive",
-     "定义递归函数 fib(n) 计算第 n 个斐波那契数（fib(1)=1, fib(2)=1），使用写参形式。调用 fib(10) 并打印结果。",
-     ["55"]),
-
-    ("lib_namespace",
-     "用 lib mymath { } 命名空间声明一个函数 twice，接受读参 x:int，写参 r:int，计算 x*2→r。调用 mymath.twice(21) 映射到 result 并打印 result。",
-     ["42"]),
-]
-
-SYSTEM = """你是 kvlang 程序员。以下 deep-dive.md 是 kvlang 的完整设计文档，语法以其中示例为准。
-只输出可直接运行、无 import 的 kvlang 代码；不要 markdown 围栏、不要解释文字。
-
-关键注意：
-- -> 写槽必须是位置（裸名、/abs、base.名），绝对不能写字面量
-- 局部变量用裸名（如 r、s、total），不用 ./ 前缀
-- 函数通过写参返回结果，不是 return 值；调用时用 f() -> slot 映射写参
-- 读参在函数体内只读，想改值就拷贝到局部变量
-- while 条件用 (cond)、循环体用 { }"""
+    "10_system_variables": """
+kvspace 中有以 `.` 开头的系统变量（§12）。请回答：
+1. `.pc` 和 `.callpc` 是什么？它们有什么区别？
+2. 用户代码能直接写 `kv.Set("/vthread/7/.pc", ...)` 吗？为什么？
+3. 帧的 `.fn` 键存的是什么？为什么它用 Link 而不是 Set？
+""",
+}
 
 
-def chat(doc_text: str, task: str) -> str:
+def chat(question: str) -> str:
     sid = str(uuid.uuid4())
+    doc_text = DOC.read_text()
     req = urllib.request.Request(
         API_BASE + "/v1/chat/completions",
         data=json.dumps({
@@ -96,7 +111,7 @@ def chat(doc_text: str, task: str) -> str:
             "user": sid,
             "messages": [
                 {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": f"# kvlang 设计文档 (deep-dive.md)\n\n{doc_text}\n\n---\n\n任务：{task}\n程序 stdout 必须恰好满足任务要求，逐行精确。只输出 kvlang 代码。"},
+                {"role": "user", "content": f"请阅读以下 kvlang 设计文档，然后回答问题。\n\n---\n{doc_text}\n---\n\n问题：\n{question}\n\n请用自己的话逐一回答。如果文档没有说清楚某个点，请指出。"},
             ],
         }).encode(),
         headers={
@@ -111,47 +126,23 @@ def chat(doc_text: str, task: str) -> str:
     return body["choices"][0]["message"]["content"]
 
 
-def strip_fences(code: str) -> str:
-    code = code.strip()
-    m = re.match(r"^```[\w]*\n(.*?)\n?```$", code, re.S)
-    return m.group(1) if m else code
-
-
-def run_kv(path: Path) -> tuple[str, str]:
-    subprocess.run(["kvspace", "clear"], capture_output=True, timeout=10)
-    r = subprocess.run([KV, str(path)], capture_output=True, text=True, timeout=60, cwd=str(ROOT))
-    return r.stdout, r.stderr
-
-
 def main() -> None:
     if not API_BASE or not API_KEY:
         sys.exit("需设置 KVLANG_EVAL_API_BASE / KVLANG_EVAL_API_KEY 环境变量")
-    doc_text = DOC.read_text()
-    OUT.mkdir(parents=True, exist_ok=True)
-    passed = 0
-    for name, task, expect in TASKS:
+    ANSWER_DIR.mkdir(parents=True, exist_ok=True)
+
+    for name, question in QUESTIONS.items():
         try:
-            code = strip_fences(chat(doc_text, task))
+            answer = chat(question)
         except Exception as e:
             print(f"❌ {name}: API 失败 {e}")
             continue
-        src = OUT / f"{name}.kv"
-        src.write_text(code + "\n")
-        try:
-            stdout, stderr = run_kv(src)
-        except subprocess.TimeoutExpired:
-            print(f"❌ {name}: 运行超时（生成代码见 {src}）")
-            continue
-        got = [ln for ln in stdout.strip().splitlines() if ln.strip()]
-        if got == expect:
-            passed += 1
-            print(f"✅ {name}")
-        else:
-            (OUT / f"{name}.fail.txt").write_text(
-                f"task: {task}\nexpect: {expect}\ngot: {got}\nstderr: {stderr[-500:]}\ncode:\n{code}\n")
-            print(f"❌ {name}: 期望 {expect}，得到 {got}")
-    total = len(TASKS)
-    print(f"\n══ 模型 {MODEL} deep-dive 理解正确率: {passed}/{total} = {passed * 100 // total}% ══")
+        path = ANSWER_DIR / f"{name}.md"
+        path.write_text(f"# {name}\n\n## 问题\n\n{question.strip()}\n\n## 模型回答（{MODEL}）\n\n{answer}\n")
+        print(f"✅ {name} → {path}")
+
+    print(f"\n══ {len(QUESTIONS)} 个问题已回答，见 {ANSWER_DIR}/ ══")
+    print("下一步：人工比对模型回答 vs kvlang 实际实现，修正 deep-dive.md 中的歧义/缺失。")
 
 
 if __name__ == "__main__":
