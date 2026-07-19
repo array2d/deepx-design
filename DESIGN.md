@@ -1,1 +1,1 @@
-doc/kvlang/design/deep-dive.md
+doc/kvlang-deep-dive.md
