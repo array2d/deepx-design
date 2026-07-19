@@ -80,8 +80,11 @@ kvspace 存储两类数据：**基础数据类型**（int、float、bool、strin
 
 - `kvlang run a.kv b.kv` → 用户指定全部源文件，先全部 load 入 kvspace，再执行 init
 - `kvlang load dir/` → 递归收集目录下全部 `.kv` 文件，仅装载不执行
-- `kvlang run lib.kv`（lib.kv 无顶层调用）→ **等同 load**，函数入 `/lib/`，进程退出
+- `kvlang run lib.kv`（lib.kv 无顶层调用）→ **等同 load**，函数入 `/lib/`，进程退出（`loadFunctions` 返回 `anyCode=false` 时 `runFiles` 跳过 `executeEntry`）
 - `import math` 在源码中 → **文档级声明**，不触发文件查找。运行时若 `/lib/math/` 为空，NameError 自然触发
+
+**`init { }` 初始化块（fix-036）**：`init { body }` 使用 `parseBody` 全语法——支持 `if`/`while`/`for`/赋值/函数调用。
+语句包装为 `def __init__() -> () { body }` 经 `lower.Func` 展开为读写码，入口 `init()` 自动调用 `__init__`。
 
 ```kv
 import math                   # 文档级声明：期望 /lib/math/ 已就绪
@@ -89,6 +92,16 @@ import "aaa/bbb" as c         # as 别名：c.func() 在 parse 期还原为 aaa/
 
 lib math {                    # 命名空间块：函数注册为 /lib/math.sum, /lib/math.twice …
     def sum(A:int, B:int) -> (C:int) { A + B -> C }
+}
+
+init {                        # 初始化块（parseBody 全语法）
+    total = 0                 # 赋值
+    1 -> i
+    while (i <= 10) {         # 循环
+        total <- total + i
+        i + 1 -> i
+    }
+    print(total)
 }
 
 def legacy() -> () { … }     # 无 lib 的 def：注册到 /lib/<name>（parser warning）
