@@ -23,7 +23,7 @@ kvlang 的主张：**程序 = 数据结构 + 函数 + 数据**。数据结构不
 | **单层 IR** | 不分 HIR/LIR/MIR，同一 AST 贯穿解析→lower→执行 |
 | **路径即语义** | PC 是 KV 路径字符串；调用栈深度=路径深度；帧是 kvspace 子树 |
 | **底座分布式，语言单线程** | heap-plat 管理 shm、op-plat 消费 GPU 指令、VM 多 worker 并行——程序员只写数据流箭头 |
-| **读写码** | `<-`/`->` 显式命名读参写参，kvcpu 直接执行；高级语法由 lower 降级为读写码 |
+| **rwir（读写码）** | `<-`/`->` 显式命名读参写参，kvcpu 直接执行；高级语法由 lower 降级为 rwir |
 | **可观测性** | 所有执行状态在 kvspace 路径中实时可读 |
 | **agent-native** | 推理、训练、RL、agent 任务流统一在 kvspace 执行模型上完成 AI 自我迭代 |
 
@@ -33,7 +33,7 @@ kvlang 的主张：**程序 = 数据结构 + 函数 + 数据**。数据结构不
 |--|------|-----|--------|
 | IR 层数 | C→IR→MIR→MC | Java→Bytecode→JIT | **单层**：源码即 IR |
 | 地址空间 | 虚拟内存 | 堆+栈 | **kvspace 树形路径** |
-| 数据流 | SSA (phi/alloca) | 操作数栈 | **读写码** `<-`/`->` 显式绑定槽 |
+| 数据流 | SSA (phi/alloca) | 操作数栈 | **rwir** `<-`/`->` 显式绑定槽 |
 | 调用栈 | 内存栈段 | Stack Frame 链表 | **路径深度=栈深度** |
 | 并发 | 多线程共享内存 | JVM 线程+GIL | **多 worker+路径所有权** |
 | 崩溃恢复 | 全失 | 全失 | **重启继续**（PC 已持久化） |
@@ -67,9 +67,11 @@ kvspace 存储两类数据：**基础数据类型**（int、float、bool、strin
 
 指令分三层，执行层只见前两层：
 
-1. **读写码**（kvcpu 直接执行）：`writes <- opcode(reads...)` 或 `opcode(reads...) -> writes`。读参写参由箭头方向决定，无隐式栈、无匿名寄存器。`writes = expr` 是 `<-` 的等价书写（写槽在左）；与其它语言的 `=` 不同，读/写角色仍由指令形态严格约束，`=` 不是表达式、不可嵌套在条件中。存储布局见 §2 二维空间模型。
-2. **`def func(ra,rb) -> (wa,wb) { … }` = 自定义复合读写码**，也叫自定义函数。单条读写码 `A + B -> C` 是原子读写码（一个操作码 + 读参 + 写参）；`def` 把多条读写码打包成一个命名单元，对外暴露相同的箭头接口——`(ra,rb)` 是读参声明，`-> (wa,wb)` 是写参声明。调用 `add(3,4) -> s` 即把实参绑入读槽、写槽映射回调用方帧。设计与读写码一脉相承：箭头方向决定数据流向，无论单条还是复合，契约一致。
-3. **控制流原语**（读写码子集）：`call`/`return`/`br`/`goto`——改变 PC，kvcpu 专门分发。
+1. **rwir**（kvcpu 直接执行）：`writes <- opcode(reads...)` 或 `opcode(reads...) -> writes`。读参写参由箭头方向决定，无隐式栈、无匿名寄存器。`writes = expr` 是 `<-` 的等价书写（写槽在左）；与其它语言的 `=` 不同，读/写角色仍由指令形态严格约束，`=` 不是表达式、不可嵌套在条件中。存储布局见 §2 二维空间模型。
+2. **`def func(ra,rb) -> (wa,wb) { … }` = 自定义复合rwir**，也叫自定义函数。单条rwir `A + B -> C` 是原子rwir（一个操作码 + 读参 + 写参）；`def` 把多条rwir打包成一个命名单元，对外暴露相同的箭头接口——`(ra,rb)` 是读参声明，`-> (wa,wb)` 是写参声明。调用 `add(3,4) -> s` 即把实参绑入读槽、写槽映射回调用方帧。设计与 rwir 一脉相承：箭头方向决定数据流向，无论单条还是复合，契约一致。
+
+**rwfunc——复合 rwir 的深层意义**。`def` 不做传统编译器的"函数体→字节码→调用约定"三级跳——它只是把多条 rwir 装进一个命名单元，对外暴露的仍是 `(reads) -> (writes)` 箭头接口。这意味着 kvlang 的调用栈不是"压栈+跳转+返回"，而是**写参的跨帧映射**：HandleCall 将实参绑入子帧读槽，HandleReturn 将子帧写槽的值搬回父帧——整个过程没有"返回值"这个概念，只有槽位间的数据流动。rwfunc 因此可以看作**带帧边界的 rwir**：原子 rwir 在同一帧内完成读写，rwfunc 跨越父子帧完成读写，而 lib 命名空间（§0.6）则是 rwfunc 的再上一层聚合。从 `A+B->C` 到 `def add` 到 `lib math`，**三层同一范式**——箭头方向决定数据流向，槽位显式声明读写角色，源码即数据流图。
+3. **控制流原语**（rwir子集）：`call`/`return`/`br`/`goto`——改变 PC，kvcpu 专门分发。
 4. **高级语法**（lower 后消失）：`if`/`else`、`while`、`for`、`label:`——写入 `/lib/` 前降级为基本块+br，kvcpu 不感知。
 
 ### 0.4 模块职责
@@ -80,7 +82,7 @@ kvspace 存储两类数据：**基础数据类型**（int、float、bool、strin
 | **parser** | `internal/parser/` | Scan→Token→递归下降→`*ast.File`，含 Diagnostic 错误收集 |
 | **lower** | `internal/lower/` | 同类型变换 pass：IfStmt/WhileStmt → BlockStmt+br |
 | **keytree** | `internal/keytree/` | 路径系统：将运行时概念映射到 kvspace 键路径 |
-| **layoutcode** | `internal/layoutcode/` | Linker：WriteFunc(编译期写入) + HandleCall/Return(运行时帧管理) |
+| **layoutrwir** | `internal/layoutrwir/` | Linker：WriteFunc(编译期写入) + HandleCall/Return(运行时帧管理) |
 | **kvcpu** | `internal/kvcpu/` | 执行引擎：Fetch-Decode-Execute+调度器+控制流 |
 | **kvspace** | `github.com/array2d/kvlang-go`（外部模块） | KV 存储接口 13 方法：Get/Set/Del/DelTree/List/Watch/Notify/Link/ClearAll 等 |
 | **vthread** | `internal/vthread/` | vthread 状态管理：Get/Set/SetDone/SetError/Create/WaitDone |
@@ -93,8 +95,8 @@ kvspace 存储两类数据：**基础数据类型**（int、float、bool、strin
 cmd/kvlang
   ├── parser ──► ast
   ├── lower ──► ast
-  ├── layoutcode ──► keytree + kvspace + ast
-  ├── kvcpu ──► layoutcode + keytree + vthread + vtype + builtin + op
+  ├── layoutrwir ──► keytree + kvspace + ast
+  ├── kvcpu ──► layoutrwir + keytree + vthread + vtype + builtin + op
   ├── vthread ──► keytree + kvspace
   └── kvspace (接口)
 ```
@@ -103,7 +105,7 @@ cmd/kvlang
 
 | 编号 | 禁止 | 理由 |
 |------|------|------|
-| R1 | 任何包 import 高于自身层级的设计包 | 依赖单向：cmd→kvcpu→layoutcode→keytree/ast |
+| R1 | 任何包 import 高于自身层级的设计包 | 依赖单向：cmd→kvcpu→layoutrwir→keytree/ast |
 | R2 | 运行时包 import parser/lower/ast | 编译与执行分离 |
 | R3 | 硬编码 kvspace 路径字符串在 keytree 之外 | 所有路径经由 keytree 函数生成 |
 | R4 | 破坏单层 IR：新增 HIR/LIR 分层 | kvlang 只一层 IR |
@@ -122,7 +124,7 @@ cmd/kvlang
 - `import math` 在源码中 → **文档级声明**，不触发文件查找。运行时若 `/lib/math/` 为空，NameError 自然触发
 
 **`init { }` 初始化块（fix-036）**：`init { body }` 使用 `parseBody` 全语法——支持 `if`/`while`/`for`/赋值/函数调用。
-语句包装为 `def __init__() -> () { body }` 经 `lower.Func` 展开为读写码，入口 `init()` 自动调用 `__init__`。
+语句包装为 `def __init__() -> () { body }` 经 `lower.Func` 展开为rwir，入口 `init()` 自动调用 `__init__`。
 
 ```kv
 import math                   # 文档级声明：期望 /lib/math/ 已就绪
@@ -256,7 +258,7 @@ def add(A: int, B: int) -> (C: int) {
 }
 ```
 
-lower + layoutcode 后写入 KV：
+lower + layoutrwir 后写入 KV：
 
 ```
 /lib/main/add/[0,0]   = "+"      ← s1=0: opcode
@@ -420,7 +422,7 @@ add(a, b) -> "s"
 > （避免 `.`、`/` 在 parser/VM 中的多次拼接变换引入 bug）——裸名本身就是位置（变量名即指针）。
 
 **读参只读公理（fix-027）**：读参是「调用方 → 被调方」的输入绑定，函数体内把读参裸名放进写槽
-（含子函数调用的写参映射、`for` 迭代变量）即破坏读写码数据流方向——双阶段拦截：
+（含子函数调用的写参映射、`for` 迭代变量）即破坏rwir数据流方向——双阶段拦截：
 parser error 级诊断拒绝装载；kvcpu 写槽前置检查（帧 `.ro` 名单，Bootstrap/HandleCall 写入）SetError 终止。
 成员写（`A.x = v`，脱糖为 set 本体回写）不写本体，豁免。
 注：五语言按值传参均允许参数重赋值——kvlang 更严格，因为读参槽位是 IR 数据流分析的方向锚点（§2.6），
@@ -601,7 +603,7 @@ kvlang 不区分"跳转"和"调用"——label block 就是无参函数，控制
 源代码 → lexer → parser → AST (if/while/for → IfStmt/WhileStmt/ForStmt)
   → lower  (结构化控制流 → BlockStmt + br/goto)
          (br/goto 又简化 → call(block_label))
-  → layoutcode (AST → KV 结构化 key-value)
+  → layoutrwir (AST → KV 结构化 key-value)
          (WriteBody: 递归写入 /lib/<pkg>/<name>/[i,j] KV 指令树)
   → kvcpu (执行循环: Decode → 分发 → 执行)
          (call = HandleCall: 软链接函数指令树到子帧 .fn)
@@ -628,7 +630,7 @@ kvlang 编译器前端走标准流水线：**`Source → Scanner.Scan() → []To
 `Expr.Quote` 区分字符串字面量和变量名，替代旧的 `"` 前缀 hack。parser 将 scanner 的 token Quote 信息保留到 AST，`Flat()` 在 KV 传输层加 `"` 前缀，`stringPrec` 用 `escapeString` 还原源码形式。数字字面量（如 `-5`）不再被误引号包裹。
 
 
-## 6. layoutcode 的设计原理与函数调用 Link 机制
+## 6. layoutrwir 的设计原理与函数调用 Link 机制
 
 传统 VM：编译器产线性字节码，call = push 返回地址 + 跳转到函数入口。kvlang 不用字节码拷贝——**函数体永不被复制，调用 = kv.Link 创建软链**让子帧指向 `/lib/` 下的指令树。
 
