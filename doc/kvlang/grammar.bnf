@@ -20,7 +20,12 @@ comment = "#" { char } newline
 ## 程序结构
 
 ```
-program     = { top_level_stmt }
+program     = { import_stmt } [ init_block ] { top_level_stmt | function }
+
+import_stmt = "import" string newline
+              (* 必须位于文件顶部; def/init 之前; fix-033 *)
+
+init_block  = "init" "{" { statement } "}"
 
 top_level_stmt = instruction | function_call
                (* 顶层无嵌套控制流; if/while/for 必须在 def 内 *)
