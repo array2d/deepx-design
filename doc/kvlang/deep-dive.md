@@ -630,6 +630,19 @@ kvlang 编译器前端走标准流水线：**`Source → Scanner.Scan() → []To
 
 传统 VM：编译器产线性字节码，call = push 返回地址 + 跳转到函数入口。kvlang 不用字节码拷贝——**函数体永不被复制，调用 = kv.Link 创建软链**让子帧指向 `/lib/` 下的指令树。
 
+layoutrwir 在五语言中的对标：
+
+| 语言 | 阶段名 | 做什么 | 产物 |
+|------|--------|------|------|
+| **C (GCC)** | codegen + assemble + link | AST→GIMPLE→RTL→asm→.o，三个独立工具（cc1/as/ld） | 线性机器码 |
+| **Go** | compile (walk + SSA) | AST→SSA→机器码，`gc` 一个二进制全包 | 线性机器码 |
+| **Rust** | codegen | MIR→LLVM IR→机器码 | 线性机器码 |
+| **Python** | compile | AST→bytecode，`compile()` 内置函数 | 线性字节码 `.pyc` |
+| **V8** | bytecode gen (Ignition) + optimizing compile (TurboFan) | AST→Ignition bytecode→TurboFan 机器码 | 线性字节码→机器码 |
+| **kvlang** | **layoutrwir** | AST→KV 结构化键值 `[s0,s1]` 二维铺入 kvspace | **树形 KV 键**，可逐槽寻址 |
+
+五种语言都在生成线性序列。kvlang 的 layoutrwir 不是序列化——是**空间布局**：每条指令展开为一组 `[s0,s1]` 坐标，读参负轴、写参正轴、opcode 零点。产物可逐槽 `kv.Get`/`kv.List`，无需反汇编器。
+
 ### 6.1 函数调用 Link 机制
 
 ```
