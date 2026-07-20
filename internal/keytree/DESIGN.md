@@ -277,7 +277,7 @@ calc(3, 4) -> result
 
 ### 8.2 加载后：/func/ 静态快照
 
-`kvlang load` 将源码编译并写入 kvspace，路径永久不变：
+`kvlang layoutrwir` 将源码编译并写入 kvspace，路径永久不变：
 
 ```
 /func/main                      = {"entry":"pre-main","reads":[],"writes":[]}

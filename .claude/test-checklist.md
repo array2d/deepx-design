@@ -38,18 +38,18 @@
 
 ---
 
-## 三、kvlang load
+## 三、kvlang layoutrwir
 
 | # | 命令 | 期望 |
 |---|------|------|
-| 3.1 | `./kvlang kvspace clear && ./kvlang load tutorial/04-func/main.kv` | 含 `loaded 1 file(s)` |
+| 3.1 | `./kvlang kvspace clear && ./kvlang layoutrwir tutorial/04-func/main.kv` | 含 `loaded 1 file(s)` |
 | 3.2 | 接上：`./kvlang kvspace get /func/main` | 含 `"entry":"pre_main"` |
 | 3.3 | 接上：`./kvlang kvspace list /vthread` | **空**（未创建 vthread）|
-| 3.4 | `./kvlang load --kvspace redis://127.0.0.1:6379 tutorial/04-func/main.kv` | 含 `loaded` |
-| 3.5 | `./kvlang load tutorial/` （目录加载）| 含 `loaded N file(s)` |
-| 3.6 | `./kvlang load` （缺路径）| stderr 含 `usage:`, 退出 2 |
-| 3.7 | `./kvlang load --unknown` （未知 flag）| stderr 含 `flag provided but not defined`, 退出 2 |
-| 3.8 | `./kvlang load --help` | 打印 `--kvspace` 说明, 退出 0 |
+| 3.4 | `./kvlang layoutrwir --kvspace redis://127.0.0.1:6379 tutorial/04-func/main.kv` | 含 `loaded` |
+| 3.5 | `./kvlang layoutrwir tutorial/` （目录加载）| 含 `loaded N file(s)` |
+| 3.6 | `./kvlang layoutrwir` （缺路径）| stderr 含 `usage:`, 退出 2 |
+| 3.7 | `./kvlang layoutrwir --unknown` （未知 flag）| stderr 含 `flag provided but not defined`, 退出 2 |
+| 3.8 | `./kvlang layoutrwir --help` | 打印 `--kvspace` 说明, 退出 0 |
 
 ---
 
@@ -109,7 +109,7 @@ KV
 
 ```bash
 ./kvlang kvspace clear
-./kvlang load tutorial/04-func/main.kv
+./kvlang layoutrwir tutorial/04-func/main.kv
 timeout 6 ./kvlang serve
 ```
 
@@ -163,7 +163,7 @@ timeout 6 ./kvlang serve
 
 ```bash
 ./kvlang kvspace clear
-./kvlang load tutorial/04-func/main.kv
+./kvlang layoutrwir tutorial/04-func/main.kv
 ./kvlang kvspace tree /src/func        # 树形结构，含 print_int, _block_1
 ./kvlang kvspace dump /src/func/print_int  # key=value 列表
 ```
@@ -194,7 +194,7 @@ wait  # watch 应在收到消息后退出，stdout 含 /test/q 和 hello
 
 | # | 命令 | 期望 |
 |---|------|------|
-| 8.6 | `./kvlang load ... && ./kvlang kvspace clear && ./kvlang kvspace list /src/func` | 空输出 |
+| 8.6 | `./kvlang layoutrwir ... && ./kvlang kvspace clear && ./kvlang kvspace list /src/func` | 空输出 |
 
 ---
 
@@ -202,7 +202,7 @@ wait  # watch 应在收到消息后退出，stdout 含 /test/q 和 hello
 
 | # | 命令 | stderr 含 | 退出码 |
 |---|------|----------|--------|
-| 9.1 | `./kvlang load --unknown` | `flag provided but not defined: -unknown` | 2 |
+| 9.1 | `./kvlang layoutrwir --unknown` | `flag provided but not defined: -unknown` | 2 |
 | 9.2 | `./kvlang serve --unknown` | `flag provided but not defined: -unknown` | 2 |
 | 9.3 | `./kvlang vet --unknown` | `flag provided but not defined: -unknown` | 2 |
 | 9.4 | `./kvlang kvspace watch --timeout notaduration /k` | `invalid value "notaduration"` | 2 |
@@ -233,7 +233,7 @@ go build ./... && go vet ./... && go test ./...
 ./kvlang kvspace clear
 ./kvlang tutorial/04-func/main.kv      # run file
 cat tutorial/04-func/main.kv | ./kvlang  # pipe
-./kvlang load tutorial/04-func/main.kv && \
+./kvlang layoutrwir tutorial/04-func/main.kv && \
   timeout 6 ./kvlang serve                                # load+serve
 
 # 完整测试

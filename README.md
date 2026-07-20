@@ -17,7 +17,7 @@ internal/
   ast/DESIGN.md                 HIR/LIR type system
   parser/DESIGN.md              Frontend pipeline
   lower/DESIGN.md               Control flow lowering
-  layoutcode/DESIGN.md          AST → KV layout
+  layoutrwir/DESIGN.md          AST → KV layout
   kvcpu/DESIGN.md               CPU execution model
   kvspace/DESIGN.md             KV storage interface
   keytree/DESIGN.md             Key tree schema

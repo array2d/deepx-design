@@ -339,11 +339,11 @@ parser.ParseFile()                parser.ParseFile()
     │                                 │
 lower.Func()                      lower.Func()
     │                                 │
-layoutcode.WriteFunc()            ┌─ graph.BuildGraph()    ← 新增
+layoutrwir.WriteFunc()            ┌─ graph.BuildGraph()    ← 新增
     │                             │    graph.ShapeInfer()
     │                             │    graph.Partition()   ← 分片决策
     │                             │    graph.Schedule()    ← 动态调度
-    │                             └─ layoutcode.WriteFunc()
+    │                             └─ layoutrwir.WriteFunc()
     │                                 │
 kvcpu.Execute()                   kvcpu.Execute()
     │                                 │
@@ -351,7 +351,7 @@ dispatch.Compute() ──► op-plat    dispatch.Compute() ──► Triton op-p
                                     新增: Shard/Gather/Barrier/Branch 指令
 ```
 
-**零侵入**：现有 `parser → lower → layoutcode → kvcpu → dispatch` 管线保留。新 Pass 在 `lower` 之后、`layoutcode` 之前插入，对上下游透明。
+**零侵入**：现有 `parser → lower → layoutrwir → kvcpu → dispatch` 管线保留。新 Pass 在 `lower` 之后、`layoutrwir` 之前插入，对上下游透明。
 
 ## 7. 为什么这个分工是正确的
 

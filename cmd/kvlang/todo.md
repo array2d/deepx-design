@@ -37,7 +37,7 @@ ticker := time.NewTicker(1 * time.Second)
 entryVal, err := kv.Get(keytree.FuncMain)
 ```
 定时轮询 `/func/main`，最多引入 1 秒延迟且 CPU 空转。
-正确设计：`kvlang load` 写入后 `kv.Notify(keytree.FuncMain, vtidVal)` 触发，
+正确设计：`kvlang layoutrwir` 写入后 `kv.Notify(keytree.FuncMain, vtidVal)` 触发，
 `mainWatcher` 改用 `kv.Watch(keytree.FuncMain, ...)` 阻塞等待，零延迟。
 
 ## P1-9 `executeEntry` 硬编码 vtid = `"run"`

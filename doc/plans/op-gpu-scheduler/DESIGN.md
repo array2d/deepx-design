@@ -73,7 +73,7 @@ execute:<gpu_id>:<vtid>:<seq>        # 例: execute:0:7:42
 
 ### 3.1 触发时机
 
-kvlang 的 compile pass（在 lower 之后、layoutcode 之前）扫描函数体：
+kvlang 的 compile pass（在 lower 之后、layoutrwir 之前）扫描函数体：
 
 ```
 def inference(x, W, b) -> (out) {
@@ -306,7 +306,7 @@ lower.Func()
 │   │  → 检查缓存 / 发起编译
 │   │  → 替换 AST：3 条 tensor op → 1 条 fused_call
 │   │
-└── layoutcode.WriteFunc() ← 不变
+└── layoutrwir.WriteFunc() ← 不变
     │
 kvcpu.Execute()
     │

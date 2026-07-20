@@ -135,7 +135,7 @@ call 加法(A, B)
 ```
 
 **依赖**：PC 自增（在子栈内部继续顺序执行）  
-**代码位置**：`internal/layoutcode/codegen.go` — `HandleCall`
+**代码位置**：`internal/layoutrwir/codegen.go` — `HandleCall`
 
 #### `return` — 垂直回退
 
@@ -150,7 +150,7 @@ return
 ```
 
 **依赖**：call（必须先有调用才有返回）  
-**代码位置**：`internal/layoutcode/codegen.go` — `HandleReturn`
+**代码位置**：`internal/layoutrwir/codegen.go` — `HandleReturn`
 
 #### `goto` — 水平跃迁（设计阶段，未实现）
 

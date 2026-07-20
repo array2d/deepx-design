@@ -24,7 +24,7 @@ import ast/DESIGN.md
 - `Func.Body` 可含任意 `Stmt`：`*Instruction`、`*IfStmt`、`*WhileStmt`、`*ForStmt`、`*BlockStmt`
 - `*Instruction.Expr` 可为多层嵌套的表达式树（如 `a + b * c`）
 
-### 输出（交给 layoutcode.WriteFunc）
+### 输出（交给 layoutrwir.WriteFunc）
 
 | 不变式 | 说明 |
 |--------|------|
@@ -115,7 +115,7 @@ result <- a + b * c        （输入：两层嵌套）
 
 | 编号 | 禁止 | 理由 |
 |------|------|------|
-| LW1 | lower import kvspace / keytree / layoutcode / kvcpu | 纯 AST 变换，不感知执行层 |
+| LW1 | lower import kvspace / keytree / layoutrwir / kvcpu | 纯 AST 变换，不感知执行层 |
 | LW2 | lower 修改 `FuncSig`（签名） | lower 只变换函数体，签名不变 |
 | LW3 | 临时槽名复用或非单调递增 | 每个临时槽只赋值一次；复用导致 kvcpu 读到上一次执行的残留值 |
 | LW4 | `lowerBody` 原地修改输入 `[]Stmt` | 纯函数契约；输入 AST 只读，输出是新节点 |

@@ -4,7 +4,7 @@ import keytree/DESIGN.md
 import kvcpu/DESIGN.md
 ```
 
-# layoutcode DESIGN
+# layoutrwir DESIGN
 
 ---
 
@@ -23,7 +23,7 @@ import kvcpu/DESIGN.md
 
 ## 零、一句话定位
 
-**layoutcode 是 kvlang 的 Linker**：编译期将 AST 链接为 `/func/` 中的平铺 KV 指令；
+**layoutrwir 是 kvlang 的 Linker**：编译期将 AST 链接为 `/func/` 中的平铺 KV 指令；
 运行期将函数体挂载到 vthread 帧、拆卸帧。
 
 类比：`ld`（静态，将 `.o` 写入可执行段）+ 动态加载器（运行时，将 `.so` 映射到进程地址空间）。
@@ -33,14 +33,14 @@ import kvcpu/DESIGN.md
 ## 一、系统位置
 
 ```
-parser/ast ──► lower ──► layoutcode.WriteFunc ──► /func/  （静态，一次写入，永久不变）
+parser/ast ──► lower ──► layoutrwir.WriteFunc ──► /func/  （静态，一次写入，永久不变）
 
                               ▲  只读签名
-kvcpu.handleControl ──► layoutcode.HandleCall   ──► /vthread/<vtid>/[pc]/   （动态，每次 call）
-                    └─► layoutcode.HandleReturn ──► kv.Unlink+DelR(frame)   （动态，每次 return）
+kvcpu.handleControl ──► layoutrwir.HandleCall   ──► /vthread/<vtid>/[pc]/   （动态，每次 call）
+                    └─► layoutrwir.HandleReturn ──► kv.Unlink+DelR(frame)   （动态，每次 return）
 ```
 
-layoutcode 是唯一**同时**操作 `/func/`（编译期写）和 `/vthread/`（运行期读写）的包。
+layoutrwir 是唯一**同时**操作 `/func/`（编译期写）和 `/vthread/`（运行期读写）的包。
 两个阶段的代码在同一文件；边界由调用时机而非文件划分。
 
 ---
@@ -174,7 +174,7 @@ HandleReturn(ctx, kv, pc, inst) → (nextPC, retVal):
 
 | 函数 | 操作路径 | 调用时机 | 是否可并发 |
 |------|---------|---------|-----------|
-| `WriteFunc` | `/src/` 写、`/func/` 写 | 编译期（`kvlang load`） | 允许：代码是 append-only |
+| `WriteFunc` | `/src/` 写、`/func/` 写 | 编译期（`kvlang layoutrwir`） | 允许：代码是 append-only |
 | `HandleCall` | `/func/` 只读签名；`/vthread/` 写帧 | 运行时，持有 vthread 所有权 | 一个 vtid 只有一个 worker |
 | `HandleReturn` | `/vthread/` 读返回值；`Unlink+DelR` 帧 | 运行时，持有 vthread 所有权 | 同上 |
 
@@ -184,7 +184,7 @@ HandleReturn(ctx, kv, pc, inst) → (nextPC, retVal):
 
 ## 五、文件职责
 
-单文件 `layoutcode.go`，当前 ~130 行（`copyFunc` 已删除）。
+单文件 `layoutrwir.go`，当前 ~130 行（`copyFunc` 已删除）。
 
 | 函数 | 阶段 | 说明 |
 |------|------|------|
@@ -202,8 +202,8 @@ HandleReturn(ctx, kv, pc, inst) → (nextPC, retVal):
 |------|------|------|
 | LC1 | `WriteFunc`/`WriteBody` 读写 `/vthread/` | 静态写入不感知运行时 |
 | LC2 | `HandleCall`/`HandleReturn` 写 `/func/` | 运行时不修改代码段 |
-| LC3 | layoutcode 直接写 `.pc`（keytree.VThreadPC） | PC 更新契约归 kvcpu；layoutcode 只返回 nextPC 由调用方写入 |
-| LC4 | 调用 `vthread.SetDone`（正常完成路径） | 顶层 return 的完成语义由 kvcpu 决策，layoutcode 只上报 retVal |
-| LC5 | layoutcode 硬编码路径字符串 | 所有路径由 keytree 函数生成 |
+| LC3 | layoutrwir 直接写 `.pc`（keytree.VThreadPC） | PC 更新契约归 kvcpu；layoutrwir 只返回 nextPC 由调用方写入 |
+| LC4 | 调用 `vthread.SetDone`（正常完成路径） | 顶层 return 的完成语义由 kvcpu 决策，layoutrwir 只上报 retVal |
+| LC5 | layoutrwir 硬编码路径字符串 | 所有路径由 keytree 函数生成 |
 | LC6 | 恢复或扩展 `copyFunc` 逻辑 | copyFunc 已整体删除，不得重建 |
 | LC7 | `kv.Link(funcKey, frameRoot)` 直接链接帧根 | frameRoot 是参数存储区，写操作会穿透链接污染函数模板；必须链到 `FnCode(frameRoot)` |

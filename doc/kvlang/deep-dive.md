@@ -114,15 +114,15 @@ cmd/kvlang
 
 ### 0.6 lib 树、CLI 装载与执行模型（fix-033/034/039）
 
-**lib 树**：`kvlang load` 将多个 `.kv` 文件拼接为单一源→parse→lower→写入 `/lib/`。
+**lib 树**：`kvlang layoutrwir` 将多个 `.kv` 文件拼接为单一源→parse→lower→写入 `/lib/`。
 每个 `lib name { }` 块形成一个 lib 节点，每个 lib 有且仅有一个 `init` 函数（init 体 + 顶层代码合并）。
-`kvlang load` 完成后形成一棵 `/lib/` 下的 lib 树。
+`kvlang layoutrwir` 完成后形成一棵 `/lib/` 下的 lib 树。
 
 **执行模型**：
 - `kvlang run`（无参数）→ 执行 `/lib/.init`（匿名 lib 的 init）
 - `kvlang run {childlib}.{func}` → 执行 `/lib/{childlib}.{func}`（`/lib/` 前缀可省略，func 默认 `init`）
-- `kvlang loadandrun <files…>` → 先 load，再 run（等价 `kvlang load <files> && kvlang run`）
-- `kvlang load <file|dir>` → 多文件拼接合并为单源→parse→lower→写入 `/lib/`。每个 lib 含该 lib 的全部函数 + 一个 init。文件夹递归收集 `.kv` 并拼接
+- `kvlang layoutrwirandrun <files…>` → 先 load，再 run（等价 `kvlang layoutrwir <files> && kvlang run`）
+- `kvlang layoutrwir <file|dir>` → 多文件拼接合并为单源→parse→lower→写入 `/lib/`。每个 lib 含该 lib 的全部函数 + 一个 init。文件夹递归收集 `.kv` 并拼接
 
 **跨 lib 调用**：使用全路径 `/lib/{childlib}.{func}()`，kvcpu 经 `LibIdx("{childlib}.{func}")` 查 pkg→`LibFunc(pkg, name)` 定位指令树→Link→执行。无 `import` 机制——lib 树已在 kvspace 中，调用即路径。
 

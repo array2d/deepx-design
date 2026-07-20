@@ -422,7 +422,7 @@ func New(kv kvspace.KVSpace, vmID string) CPU
 
 ```
 cpu.go
-execute.go  ──► controlflow.go  ──► layoutcode
+execute.go  ──► controlflow.go  ──► layoutrwir
             ──► builtin                  └──► keytree
             ──► vtype           ──► builtin (ResolveReadValue)
 sched.go    ──► keytree / vthread
@@ -441,7 +441,7 @@ kvcpu 是依赖链终点，不被任何内部包 import。
 | B3 | 硬编码 kvspace 路径字符串 | 所有路径只由 keytree 生成 |
 | B4 | vthread 状态变更绕过 `vthread.Set`/`vthread.SetDone`/`vthread.SetError` | 必须有统一入口，确保 PC 契约和终态 Del+Notify 语义 |
 | B5 | Pick 引入分布式锁 | Redis 单线程保证原子写；锁增加延迟和复杂度 |
-| B6 | 执行器直接操作 kvspace（绕过 layoutcode/builtin/vtype） | 存储操作由各层封装；kvcpu 只做调度 |
+| B6 | 执行器直接操作 kvspace（绕过 layoutrwir/builtin/vtype） | 存储操作由各层封装；kvcpu 只做调度 |
 | B7 | 将 `pick`/`wait` 导出为公开函数 | 调度原语是实现细节，不属于 CPU interface |
 | B8 | 跨 vthread 写另一个 vthread 的私有路径 | 违反路径所有权原则；破坏并发安全 |
 | B9 | 在 Execute 循环中不检查栈深度 | 无保护的递归会导致 KV 路径无限增长 |

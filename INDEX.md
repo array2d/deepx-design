@@ -68,7 +68,7 @@ deepx-design/
 │   ├── ast/DESIGN.md
 │   ├── parser/DESIGN.md + todo.md
 │   ├── lower/DESIGN.md + todo.md
-│   ├── layoutcode/DESIGN.md + todo.md
+│   ├── layoutrwir/DESIGN.md + todo.md
 │   ├── kvcpu/DESIGN.md + todo.md
 │   ├── kvspace/DESIGN.md + todo.md
 │   ├── keytree/DESIGN.md + todo.md
@@ -98,7 +98,7 @@ deepx-design/
 - **§1**: Address space — kvspace tree paths (`/src/` `/func/` `/vthread/` `/sys/`)
 - **§2**: Instruction classification — read-write code / control flow primitives / high-level syntax (lowered away)
 - **§3**: Execution model — PC = KV path string, path depth = call stack depth
-- **§4**: Module responsibilities — ast/parser/lower/keytree/layoutcode/kvcpu/kvspace/vthread/vtype/builtin
+- **§4**: Module responsibilities — ast/parser/lower/keytree/layoutrwir/kvcpu/kvspace/vthread/vtype/builtin
 - **§5**: Forbidden items (R1-R6)
 
 **Comparison matrix with LLVM/JVM**: single-layer IR / tree address space / read-write code / path depth = stack depth / multi-worker + path ownership / crash recovery
@@ -141,7 +141,7 @@ deepx-design/
 | keytree | 328 | 9/14 | Design goals table |
 | ast | 332 | 8/14 | Design goals table + numbered prohibitions |
 | parser | 230 | 8/14 | Design goals table + industry comparison |
-| layoutcode | 198 | 9/14 | Design goals table |
+| layoutrwir | 198 | 9/14 | Design goals table |
 | **root** | 73 | 4/14 | **Severely insufficient — needs rewrite to 300+ lines** |
 
 ---
@@ -211,7 +211,7 @@ Not suitable for: HFT / systems programming / standalone CLI / frontend Web
 - §3 Functions have NO return values: only read-params & write-params. Bare identifier `-> s` is always wrong
 - §4 Control flow: label = path, goto = call(label), zero lookup
 - §5 Compiler architecture comparison (Python/Lua/kvlang)
-- §6 layoutcode design principles
+- §6 layoutrwir design principles
 - §7 Design decision summary table
 - §8 Variable name IS pointer
 - §9 XValue kind system
@@ -316,7 +316,7 @@ DESIGN.md (root, 73 lines, 4/14 score) ← needs rewrite to 300+ lines
 ├── ast/DESIGN.md              (332 lines, 8/14)
 ├── parser/DESIGN.md           (230 lines, 8/14)
 ├── lower/DESIGN.md
-├── layoutcode/DESIGN.md       (198 lines, 9/14)
+├── layoutrwir/DESIGN.md       (198 lines, 9/14)
 ├── kvcpu/DESIGN.md            (423 lines, 14/14 ✅ template)
 ├── kvspace/DESIGN.md
 └── keytree/DESIGN.md          (328 lines, 9/14)
@@ -329,7 +329,7 @@ DESIGN.md (root, 73 lines, 4/14 score) ← needs rewrite to 300+ lines
 | **cmd/kvlang** | Dual vtid generation strategy / non-atomic incrVtid → Redis INCR / JSON serialization violates scalar principle / mainWatcher 1s polling → Watch / hardcoded vtid="run" |
 | **parser** | ⚠️ S11 write slot KV path validation / ⚠️ S9 TopLevelCalls→init() merge / S4 linear lookahead / S5 error recovery / S1 Token Span / S2 byte offset pos / S7 EBNF |
 | **lower** | P10 if→br full coverage, delete OpIf compat / P11 for/break/continue (✅ done) |
-| **layoutcode** | P0-8 block label fakes func signature / P1-1 unused ctx / P1-11 kv.Set errors ignored |
+| **layoutrwir** | P0-8 block label fakes func signature / P1-1 unused ctx / P1-11 kv.Set errors ignored |
 | **kvcpu** | P0-2 duplicate isCopyOp logic / P0-3 negative number literal unsupported / P1-1 unused ctx |
 | **kvspace** | P1-5 links cache stale in multi-instance / P1-6 per-layer SADD |
 | **vthread** | P1-1 unused ctx / P1-2 vtid generation strategy unified |

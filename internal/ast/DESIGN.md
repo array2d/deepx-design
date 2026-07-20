@@ -15,7 +15,7 @@
 
 | 目标 | 含义 |
 |------|------|
-| **单层 IR** | 同一 AST 贯穿 parser → lower → layoutcode → kvcpu，类型不变 |
+| **单层 IR** | 同一 AST 贯穿 parser → lower → layoutrwir → kvcpu，类型不变 |
 | **类型强制不变量** | 编译期可检测的约束靠类型系统，不靠注释或运行时检查 |
 | **零字符串语义** | 操作数类别、参数签名、条件表达式均为结构化字段 |
 | **确定性变换** | lower pass 是纯函数：`*ast.File → *ast.File`，可测试可证明 |
@@ -216,7 +216,7 @@ io.Reader
       · evalCond(*Instruction)：若为简单槽引用直接用，否则填写 Writes
       · lower 不依赖 parser 包
     │
-    ▼ layoutcode.WriteFunc(kv, pkg, ast.Func)
+    ▼ layoutrwir.WriteFunc(kv, pkg, ast.Func)
       · fn.Sig.String()       → kv.Set(/func/pkg/name, sig)
       · fn.Sig.Params/Returns → 直接绑定，无运行时重解析
       · BlockStmt.Body        → kv.Set(/func/pkg/name/<label>/[i,j], ...)
@@ -358,6 +358,6 @@ func (*BreakStmt) stmt(); func (*ContinueStmt) stmt()
 | A1 | AST 节点 import kvspace 或任何运行时包 | AST 是纯数据，不可耦合执行层 |
 | A2 | 新增 HIR/LIR 类型分化 | 单层 IR 是 kvlang 的根基 |
 | A3 | `Instruction.Reads`/`Writes` 使用裸 `string` 代替 `Operand`/`WriteSlot` | 结构化类型强制不变量 |
-| A4 | 在 AST 节点上挂载运行时方法（如 `SetKV`） | 数据与行为分离；SetKV 已在 layoutcode |
+| A4 | 在 AST 节点上挂载运行时方法（如 `SetKV`） | 数据与行为分离；SetKV 已在 layoutrwir |
 | A5 | Walk 之外新增遍历入口 | 单一遍历入口确保所有 pass 一致性 |
 | A6 | `FuncSig` 回退为字符串存储 | 结构化签名是编译期类型检查的基础 |

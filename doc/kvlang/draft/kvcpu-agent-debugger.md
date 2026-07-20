@@ -219,7 +219,7 @@ jq 'select(.op=="return")' /tmp/trace.ndjson
 
 ### B. 源码位置映射（PC → file:line）
 
-需要 parser 在 AST 节点上记录 `Pos`，lower 保留，layoutcode 写入
+需要 parser 在 AST 节点上记录 `Pos`，lower 保留，layoutrwir 写入
 `/src/<pkg>/<func>/<pc>` = `"file.kv:18"`。
 
 ### C. `next`（跳过函数调用）

@@ -125,7 +125,7 @@
 
 ---
 
-### layoutcode/DESIGN.md — 缺 5 项 (9/14)
+### layoutrwir/DESIGN.md — 缺 5 项 (9/14)
 
 | # | 状态 | 缺失 |
 |---|------|------|
@@ -133,10 +133,10 @@
 | 1 | ⚠️ | 有 ld/动态加载器类比但无完整矩阵 |
 | 2 | ✅ | §二 WriteFunc 五步协议 + §三帧路径约定 |
 | 3 | ✅ | §一系统位置 ASCII 图 |
-| 4 | ❌ | 无 dispatch (layoutcode 不 dispatch，合理) |
+| 4 | ❌ | 无 dispatch (layoutrwir 不 dispatch，合理) |
 | 5 | ✅ | §3.2 HandleCall + §3.3 HandleReturn 完整语义 |
-| 6 | ⚠️ | 错误由调用方(kvcpu)处理，layoutcode 返回 error，合理但未说明 |
-| 7 | ❌ | 无生命周期 (layoutcode 无状态，合理) |
+| 6 | ⚠️ | 错误由调用方(kvcpu)处理，layoutrwir 返回 error，合理但未说明 |
+| 7 | ❌ | 无生命周期 (layoutrwir 无状态，合理) |
 | 8 | ✅ | §四两阶段边界表 (静态/动态分离) |
 | 9 | ❌ | 无并发模型 (单 worker 持有 vtid，合理) |
 | 10 | ❌ | 无保护 |
@@ -156,7 +156,7 @@
 | keytree | 328 | 9/14 | 设计目标表 |
 | ast | 332 | 8/14 | 设计目标表 + 编号禁止项 |
 | parser | 230 | 8/14 | 设计目标表 + 工业界对比 |
-| layoutcode | 198 | 9/14 | 设计目标表 |
+| layoutrwir | 198 | 9/14 | 设计目标表 |
 | **root** | **73** | **4/14** | **严重不足 — 缺少设计目标/禁止项/文件职责/工业界对比/全部** |
 
 ## 优先级

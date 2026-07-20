@@ -23,7 +23,7 @@ kvlang 标识符不能以 `.` 开头，因此 **所有 `.` 前缀键均为引擎
 | `.pc` | String | `vthread.Set` / `vthread.SetError` | `Execute` 循环末尾 | 当前指令绝对 PC |
 | `.status` | String / Notify | `vthread.Set` → Del+Notify（终态） | `Execute` 循环状态检查 | 生命周期：`init`\|`running`\|`wait`；终态：Del+Notify(retVal) |
 | `.<statusVal>/msg` | String | `vthread.SetError` | 外部监控 / agent | 终态附加描述，路径动态生成：`.error/msg`、`.timeout/msg` 等 |
-| `.rootfunc` | String | `layoutcode.Bootstrap` | `resolveLabel`（TCO label 解析） | 入口函数名，仅顶层帧（Bootstrap 写入，HandleCall 不覆写此层） |
+| `.rootfunc` | String | `layoutrwir.Bootstrap` | `resolveLabel`（TCO label 解析） | 入口函数名，仅顶层帧（Bootstrap 写入，HandleCall 不覆写此层） |
 | `.debug` | String | agent（`kvspace set`） | `Execute` 循环（`isFuncEntryPC` 处） | 调试控制：`""` = 正常，`"step"` = 单步 |
 | `.debug.pause` | Notify 队列 | `kvcpu/debug.go:debugNotifyPause` | agent（`kvspace watch` / `kvspace trace`） | 暂停事件 JSON；非持久键，Notify/Watch 语义 |
 | `.debug.resume` | Notify 队列 | agent（`kvspace notify`） | `kvcpu/debug.go:debugWaitResume` | 恢复命令：`"step"` / `"continue"` / `"abort"` |
@@ -48,8 +48,8 @@ kvlang 标识符不能以 `.` 开头，因此 **所有 `.` 前缀键均为引擎
 
 | 键 | 类型 | 写入方 | 读取方 | 说明 |
 |----|------|--------|--------|------|
-| `.callpc` | String | `layoutcode.HandleCall` | `layoutcode.HandleReturn` | 调用指令的绝对地址；HandleReturn 从此处推算写槽路径（`[addr0,1]`, `[addr0,2]`…）并恢复父 PC |
-| `.rootfunc` | String | `layoutcode.HandleCall` | `kvcpu/controlflow.go:resolveLabel` | 函数名；TCO（goto/br）复用帧时**不更新**，保持递归入口函数名 |
+| `.callpc` | String | `layoutrwir.HandleCall` | `layoutrwir.HandleReturn` | 调用指令的绝对地址；HandleReturn 从此处推算写槽路径（`[addr0,1]`, `[addr0,2]`…）并恢复父 PC |
+| `.rootfunc` | String | `layoutrwir.HandleCall` | `kvcpu/controlflow.go:resolveLabel` | 函数名；TCO（goto/br）复用帧时**不更新**，保持递归入口函数名 |
 
 **写槽说明（无额外系统键）：**
 
