@@ -725,7 +725,26 @@ TCO（goto/br）：不建子帧，仅 Unlink + Link 换 .funclib 指向目标块
 函数调用是 `call(name, args…) → writes`——opcode 位是 `call`，Link 发生在 HandleCall 内部。
 二者在 KV 层无歧义，opcode 位永远不放变量引用（§2.3）。
 
-## 9. XValue 的 kind 系统与数字类型算子
+## 9. 类型系统
+
+kvlang 是**严格类型语言**。所有变量、参数、返回值在编译期必须有确定的类型——不允许无类型变量，不允许运行时类型隐式改变。
+
+### 9.0 类型归属规则
+
+类型的归属分为两级：
+
+| 归属 | 存放位置 | 举例 |
+|------|---------|------|
+| **函数签名** | `/lib/<pkg>.<name>` — `string:def func(args) -> (rets)` | `def add(A:int, B:int) -> (C:int)` |
+| **指令槽引用** | `/lib/<pkg>.<name>/[s0,s1]` — 目前为 `rwir:` 文本引用 | `[0,-1]="A"` `[0,1]="C"` |
+| **运行时值** | `/vthread/<vtid>/<frame>/<var>` — 携带 kind 的 XValue | `A → int64:10`, `s → float64:3.14` |
+
+**铁律**：
+- `def` 签名中每个参数和返回值**必须声明类型**（`name:type`）
+- 签名缺类型的 def **拒绝装载**（parser error）
+- 指令槽 `[s0,s1]` 是槽位描述符，类型信息在签名中，不在槽中
+- 运行时通过 `kind` 标签自描述，无需查签名
+- 与五语言对齐：C必须声明、Rust必须声明、Go必须声明、TS可选但推荐、Python无声明——kvlang 选 C/Rust/Go 阵营
 
 ### 9.1 kind 家族
 
