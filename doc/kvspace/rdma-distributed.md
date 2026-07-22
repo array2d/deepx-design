@@ -1,14 +1,6 @@
 # kvspace RDMA 分布式设计
 
-## 1. 纠正：kvspace 不是单进程访问
-
-之前 Pebble 内嵌方案有一个致命假设错误：
-
-```
-❌ 错误假设: kvspace 只有 kvlang VM Workers 在读写
-            → 可以内嵌到 VM 进程中
-
-✅ 实际情况: kvspace 是多组件共享的数据平面
+kvspace 是多组件共享的数据平面
 ```
 
 **真实访问者**：
