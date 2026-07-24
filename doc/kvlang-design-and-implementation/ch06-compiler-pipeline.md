@@ -41,14 +41,14 @@ import kvlang-design-and-implementation
   → layoutrwir (AST → KV 结构化 key-value)
          (WriteBody: 递归写入 /lib/<pkg>.<name>/[i,j] KV 指令树)
   → kvcpu (执行循环: Decode → 分发 → 执行)
-         (call = HandleCall: 软链接函数指令树到子帧 .funclib)
+         (call = HandleCall: ExtIndex 帧根 → /lib/ 指令树)
          (return = HandleReturn: 回传值, 清理子栈, 恢复父 PC)
 ```
 
 关键特征：
 - **PC 是 KV 路径字符串**，不是整数
 - **指令在 KV 树中**，通过 `kv.Get` 获取，不是内存数组
-- **调用 = 软链接**（HandleCall 通过 kv.Link 将子帧 .funclib 指向 /lib/<pkg>.<name> 只读指令树）
+- **调用 = extindex**（HandleCall 通过 kv.ExtIndex 将帧根指向 /lib/<pkg>.<name> 只读指令树）
 - **返回 = 子树删除**（HandleReturn 清理子栈, 回传值）
 - **label block = 无参函数**，控制流统一为 call/return
 
