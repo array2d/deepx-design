@@ -2,15 +2,26 @@
 
 ## 目录
 
-- [Chapter 1: Design Constitution（设计宪法）](ch01-design-constitution.md)
-- [Chapter 2: The Address Space and Naming（寻址模型与命名）](ch02-address-space-and-naming.md)
-- [Chapter 3: Instruction Architecture（指令架构）](ch03-instruction-architecture.md)
-- [Chapter 4: Function Model（函数模型）](ch04-function-model.md)
-- [Chapter 5: Control Flow（控制流）](ch05-control-flow.md)
-- [Chapter 6: Compiler Pipeline（编译器流水线）](ch06-compiler-pipeline.md)
-- [Chapter 7: Code Layout and Dynamic Linking（代码布局与动态链接）](ch07-code-layout-and-dynamic-linking.md)
-- [Chapter 8: Type System（类型系统）](ch08-type-system.md)
-- [Chapter 9: Member Access and Data Structures（成员访问与数据结构）](ch09-member-access-and-data-structures.md)
-- [Chapter 10: System Variables（系统变量）](ch10-system-variables.md)
-- [Chapter 11: Debugging and Observability（调试与可观测性）](ch11-debugging-and-observability.md)
-- [Appendix: Design Decisions Summary（设计决策总结）](apx-design-decisions-summary.md)
+### kvspace篇 — KV 作为统一地址空间
+
+- [01 — 设计宪法](kvspace篇-01-设计宪法.md)
+- [02 — 寻址模型与命名](kvspace篇-02-寻址模型与命名.md)
+- [03 — 代码指令的布局格式](kvspace篇-03-代码指令的布局格式.md)
+- [04 — 系统变量](kvspace篇-04-系统变量.md)
+
+### parser篇 — 源码 → KV 存储
+
+- [01 — 指令架构](parser篇-01-指令架构.md)
+- [02 — 函数](parser篇-02-函数.md)
+- [03 — 控制流](parser篇-03-控制流.md)
+- [04 — 编译器流水线](parser篇-04-编译器流水线.md)
+
+### runtime篇 — KV 存储 → 执行
+
+- [01 — 类型系统](runtime篇-01-类型系统.md)
+- [02 — 成员访问与数据结构](runtime篇-02-成员访问与数据结构.md)
+- [03 — 调试与可观测性](runtime篇-03-调试与可观测性.md)
+
+### 附录
+
+- [设计决策总结](apx-design-decisions-summary.md)
