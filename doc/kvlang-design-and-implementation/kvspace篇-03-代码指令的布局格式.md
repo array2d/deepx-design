@@ -17,37 +17,24 @@ layoutrwir 在五语言中的对标：
 
 五种语言都在生成线性序列。kvlang 的 layoutrwir 不是序列化——是**空间布局**：每条指令展开为一组 `[s0,s1]` 坐标，读参负轴、写参正轴、opcode 零点。产物可逐槽 `kv.Get`/`kv.List`，无需反汇编器。
 
-### 6.1 函数调用 Link 机制
+### 6.1 ExtIndex：帧根指向指令树
+
+函数调用时，不是把指令字节码拷贝到新帧——而是通过 **ExtIndex** 让帧根成为指向 `/lib/` 指令树的扩展索引：
 
 ```
-调用 add(3,4) -> s 的完整链路：
-
-编译期（load 时，WriteFunc）：
+编译期（WriteFunc）：
   AST → KV 结构化写入 /lib/main.add/:
     /lib/main.add/[0,0] = "+"      /lib/main.add/[0,-1] = "A"
     /lib/main.add/[0,-2] = "B"     /lib/main.add/[0,1] = "C"
     /lib/main.add/[1,0] = "return"
     /lib/main.add                 = "def add(A:int,B:int)->(C:int)"  (签名)
 
-调用时（HandleCall）：
-  1. kv.Get("/lib/main.add") → 签名 → 解析参数名
-  2. frameRoot = callPC              # /vthread/42/[3,0]
-  3. kv.ExtIndex(frameRoot+"/", "/lib/main.add/")  # ★ extindex：帧根本身 → /lib/ 指令树
-  4. 读参零拷贝：存储调用方值的绝对路径到 .rparam/<name>，CPU 读参时直接从此路径读取
-  5. 写参零拷贝：存储调用方写目标的绝对路径到 .wparam/<name>，CPU 写参时直接写入此路径
-  6. kv.Set(frameRoot+".rootfunc", funcName)    # 入口函数名
-  7. kv.Set(frameRoot+".ro", paramList)          # 只读参数名单（fix-027）
-  8. 返回 frameRoot+"/[0,0]"                     # 子帧第一条指令 PC
-
-返回时（HandleReturn）：
-  1. 写参已在子帧执行期间经 .wparam 直写父帧，无需搬运
-  2. frameRoot 即 callPC，NextPC(frameRoot) 恢复父帧下一条指令
-  3. kv.UnLink(frameRoot+"/")                           # 移除 extindex
-  4. kv.DelTree(frameRoot)                         # 清整个子帧
-
-TCO（goto/br）：不建子帧，仅 Unlink + ExtIndex 换帧根 extindex 指向目标块（.rootfunc 保持根函数名）。
-顶层调用（Bootstrap）：frameRoot 即 callPC，直接 ExtIndex frameRoot → funcKey。
+调用时：
+  kv.ExtIndex(frameRoot+"/", "/lib/main.add/")  # 帧根本身 → /lib/ 指令树
+  # 所有帧共享 /lib/ 下同一份指令树，零拷贝
 ```
+
+HandleCall/HandleReturn 的完整执行机制（读写参重定向、帧创建/销毁、TCO）详见 [runtime篇-04 — 执行模型](runtime篇-04-执行模型.md)。
 
 ### 6.2 与传统 VM 的关键差异
 

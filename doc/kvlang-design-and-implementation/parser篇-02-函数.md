@@ -96,36 +96,9 @@ def sum(arr) -> (acc:int) { acc + arr[0] -> acc }
 
 传统语言的"返回值"本质是**调用栈上的一块内存**——函数执行完毕，这块内存的值被拷贝给调用者。
 
-kvlang 没有线性调用栈，每个函数调用创建一个 KV 子树：
+kvlang 没有线性调用栈，也不存在"返回值"——HandleCall/HandleReturn 的跨帧参数传递机制详见 [runtime篇-04 — 执行模型](runtime篇-04-执行模型.md)。
 
-```
-/vthread/run/               ← 调用方帧根
-/vthread/run/                             ← 帧根 extindex → /lib/（指令查找）
-/vthread/run/[3,0]/         ← 被调方帧根（callPC，extindex → /lib/）
-/vthread/run/[3,0]/C        ← 被调方的局部变量 C（帧根 extindex 写层）
-```
-
-"返回值"在 kvlang 里的正确表述是：  
-**HandleReturn 把被调方帧的写参槽值，写回到调用方帧的指定路径**。
-
-这个"指定路径"通过调用时的写槽声明传递：
-
-```
-# 指令级别（lower 后的 KV 表示）：
-[3,0] = "add"              ← opcode（函数名）
-[3,-1] = "a"               ← 读参 A
-[3,-2] = "b"               ← 读参 B
-[3,1] = "sum"              ← 写参 C 的目标路径（HandleReturn 时写入）
-```
-
-HandleReturn 经 frameRoot（即 callPC）定位调用指令，读取其写槽 `[3,1]`：
-
-```
-kv.Get(childFrame + "/C")  →  value
-kv.Set(parentFrame + "/sum", value)
-```
-
-这不是"函数返回值"，是**写参的跨帧路径映射**。
+核心要点：函数调用 `f(args) -> s` 不是"f 返回一个值赋给 s"——它是**写参的跨帧路径映射**：被调方帧的写参由 HandleReturn 经 `.wparam` 直写调用方帧的目标路径。整个过程只有槽位间的数据流动，没有"返回值"这个概念。
 
 ---
 

@@ -40,16 +40,13 @@ import kvlang-design-and-implementation
          (br/goto 又简化 → call(block_label))
   → layoutrwir (AST → KV 结构化 key-value)
          (WriteBody: 递归写入 /lib/<pkg>.<name>/[i,j] KV 指令树)
-  → kvcpu (执行循环: Decode → 分发 → 执行)
-         (call = HandleCall: ExtIndex 帧根 → /lib/ 指令树)
-         (return = HandleReturn: 回传值, 清理子栈, 恢复父 PC)
 ```
+
+编译产物写入 `/lib/` 后，由 kvcpu 执行——执行模型详见 [runtime篇-04 — 执行模型](runtime篇-04-执行模型.md)。
 
 关键特征：
 - **PC 是 KV 路径字符串**，不是整数
 - **指令在 KV 树中**，通过 `kv.Get` 获取，不是内存数组
-- **调用 = extindex**（HandleCall 通过 kv.ExtIndex 将帧根指向 /lib/<pkg>.<name> 只读指令树）
-- **返回 = 子树删除**（HandleReturn 清理子栈, 回传值）
 - **label block = 无参函数**，控制流统一为 call/return
 
 ### 5.1 编译器前端流水线
