@@ -1,6 +1,6 @@
-# Chapter 7: 代码指令的布局格式
+# 代码指令的布局格式
 
-## 6. layoutrwir 的设计原理与函数调用 extindex 机制
+## layoutrwir 的设计原理与函数调用 extindex 机制
 
 传统 VM：编译器产线性字节码，call = push 返回地址 + 跳转到函数入口。kvlang 不用字节码拷贝——**函数体永不被复制，调用 = ExtIndex 将帧根设为扩展索引**指向 `/lib/` 下的指令树。
 
@@ -17,7 +17,7 @@ layoutrwir 在五语言中的对标：
 
 五种语言都在生成线性序列。kvlang 的 layoutrwir 不是序列化——是**空间布局**：每条指令展开为一组 `[s0,s1]` 坐标，读参负轴、写参正轴、opcode 零点。产物可逐槽 `kv.Get`/`kv.List`，无需反汇编器。
 
-### 6.1 ExtIndex：帧根指向指令树
+### ExtIndex：帧根指向指令树
 
 函数调用时，不是把指令字节码拷贝到新帧——而是通过 **ExtIndex** 让帧根成为指向 `/lib/` 指令树的扩展索引：
 
@@ -36,7 +36,7 @@ layoutrwir 在五语言中的对标：
 
 HandleCall/HandleReturn 执行机制见 runtime篇-04。
 
-### 6.2 与传统 VM 的关键差异
+### 与传统 VM 的关键差异
 
 | | 传统 VM | kvlang |
 |--|---------|--------|

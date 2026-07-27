@@ -1,11 +1,11 @@
-# Chapter 9: Member Access and Data Structures（成员访问与数据结构）
+# Member Access and Data Structures（成员访问与数据结构）
 
 
-## 10. `.` 运算符——kvspace 路径的标准成员访问
+## `.` 运算符——kvspace 路径的标准成员访问
 
 `ptr.val` → `at(ptr, "val")` → `kv.Get(ptr/val)`。Pratt 循环中 `.` 作为后缀运算符，对标 C `ptr->val`、Go `ptr.val`。写侧 `42 -> ptr.val` 展开为 `set(ptr, "val", 42) -> ptr`。Scanner 将 `.` 作为 token 分隔符和独立 Dot token，`at`/`set` builtin 支持字符串字段名做 kvspace 路径拼接。
 
-### 10.1 静态字段：`h.field`
+### 静态字段：`h.field`
 
 ```
 h.field  →  at(h, "field")    # field 是字面量字符串
@@ -13,7 +13,7 @@ h.field  →  at(h, "field")    # field 是字面量字符串
 
 解析时 Pratt 消费 `.` 后读到普通标识符 → 作为 `StrLit` 传给 `at`。
 
-### 10.2 动态解引用：`h.*key`
+### 动态解引用：`h.*key`
 
 ```
 h.*key  →  at(h, key)         # key 是变量，取其值作为路径段名
@@ -40,7 +40,7 @@ h.*key                # at("/tmp", 2) → 读 /tmp/2
 
 详见 `doc/kvlang/design/kvspace-hash-map.md`。
 
-### 10.3 struct ≡ dict：kvspace 中的等价性
+### struct ≡ dict：kvspace 中的等价性
 
 kvlang 不区分 struct 和 dict。二者在 kvspace 中是**同一种东西：共享前缀的键族**。
 
@@ -62,7 +62,7 @@ kvspace 中缺席即 null。dict 标记非 string 值，成员解析自动走按
 
 **成员分隔符已统一为 `.`**（fix-009）：`at`/`set`/`dget`/`dset`/`kvat`/`kvhas` 的成员拼接全部经 `keytree.Member(base, name)`（`base + "." + name`）。链表节点落盘即 `/n0.val`、`/n0.next` 平坦键，零子树。
 
-### 10.4 成员解析规则：按值优先，按名回退
+### 成员解析规则：按值优先，按名回退
 
 表达式 `base.名`（读写两侧同规则）中 base 的解析：
 

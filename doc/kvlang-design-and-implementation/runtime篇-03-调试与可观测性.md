@@ -1,15 +1,15 @@
-# Chapter 11: Debugging and Observability（调试与可观测性）
+# Debugging and Observability（调试与可观测性）
 
 > **TODO**: 本章的 tree 输出和 `.funclib` 引用需同步更新为 extindex 模型（帧根 extindex → /lib/）。
 > 待代码侧 refactor 完成并 `kvspace tree` 输出稳定后逐段修正。
 
 import ch10-system-variables
 
-## 11. 调试器实战：用 kvspace 静态观察栈与源码
+## 调试器实战：用 kvspace 静态观察栈与源码
 
 本节以 `tutorial/03-debugger/chain_array.kv` 为例，演示如何用 `kvlang --debug` 暂停程序，再用 `kvspace tree/list` 静态观察 vthread 栈帧（`/vthread`）和编译后源码（`/lib`）。
 
-### 11.1 启动调试
+### 启动调试
 
 ```bash
 cd kvlang
@@ -42,7 +42,7 @@ def init() -> () {
 }
 ```
 
-### 11.2 观察栈帧：`kvspace tree /vthread`
+### 观察栈帧：`kvspace tree /vthread`
 
 暂停后，`kvspace tree /vthread` 输出（仅保留 `run` vthread 和相关函数）：
 
@@ -88,7 +88,7 @@ def init() -> () {
     └── _  int64[2]:30                       ← f1 的丢弃槽，存放 f2 产出的数组
 ```
 
-### 11.3 关键发现
+### 关键发现
 
 **PC 字符串即调用栈**。PC = `/vthread/run/[0,0]/[0,0]/[1,0]/[0,0]`，逐段解读：
 
@@ -119,7 +119,7 @@ f3 .wparam/s → /vthread/run/r          ← 写回 init 的 r（最终结果）
 
 **`.rootfunc` 在 TCO 语义中保持根函数名**。每个帧独立记录 `.rootfunc`（此处 f1/f2/f3 各记自己的函数名），即使 TCO 复用帧也不覆盖——`resolveLabel` 靠它解析裸标签。
 
-### 11.4 观察源码：`kvspace tree /lib`
+### 观察源码：`kvspace tree /lib`
 
 暂停后 `/lib/` 已包含 chain_array.kv 的全部编译产物：
 
@@ -164,7 +164,7 @@ s0=4 │                return
 
 **`/lib/.src` 源码副本**。每个函数的完整 lower 后源码以 string 值存入 `/lib/.*.src`——这是 `kvspace tree` 能展示源码的原因。`.srcmap` 记录行号→文件路径映射，供错误定位。
 
-### 11.5 调试器协议要点
+### 调试器协议要点
 
 | 键 | 方向 | 机制 | 值 |
 |----|------|------|-----|
@@ -174,7 +174,7 @@ s0=4 │                return
 
 暂停后 agent 写入 `kvspace notify /vthread/<vtid>/.debugger.resume continue` 即可恢复执行。
 
-### 11.6 常用观察命令
+### 常用观察命令
 
 ```bash
 # 栈帧全貌

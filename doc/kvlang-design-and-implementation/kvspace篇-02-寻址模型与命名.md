@@ -1,7 +1,7 @@
-# Chapter 2: The Address Space and Naming（寻址模型与命名）
+# The Address Space and Naming（寻址模型与命名）
 
 
-## 1. 寻址模型：KV 路径 vs 内存地址
+## 寻址模型：KV 路径 vs 内存地址
 
 ### 传统 VM (Python/Lua/JVM)
 
@@ -36,7 +36,7 @@ KV 路径是**树形层级字符串**，跳转和调用本质是路径拼接 + �
 | 栈帧 | `push rbp; sub rsp, N` | `PyFrameObject` (堆分配) | `CallInfo + L->stack` | `/vthread/tid/<pc>/` KV 子树 |
 | 作用域 | 栈偏移 | `f_localsplus` 数组 | 寄存器索引 | KV key 子路径（裸名 `x`, `y`） |
 
-## 8. 变量名即指针
+## 变量名即指针
 
 kvlang 没有 `&` 取址运算符——**代码中对象的变量名，本身就是这个变量的指针**（kvspace 路径）。指令槽里存的从来不是值，而是指针文本（`[0,-1] = "A"`、`[0,1] = "C"`），求值永远经过一次指针间接。
 

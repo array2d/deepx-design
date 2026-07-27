@@ -1,7 +1,7 @@
-# Chapter 12: Diagnostic Output（诊断输出规范）
+# Diagnostic Output（诊断输出规范）
 
 
-## 12. 诊断输出规范（logx）
+## 诊断输出规范（logx）
 
 **所有 stderr 诊断输出必须通过 `internal/logx` 包，禁止直接调用 `fmt.Fprint*`。** 输出格式对齐五大语言编译器（GCC/Go/V8）：`{level}: {context}: {msg}`，无时间戳、无 key=value。
 

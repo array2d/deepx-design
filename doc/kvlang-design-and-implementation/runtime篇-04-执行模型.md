@@ -1,10 +1,10 @@
-# Chapter 13: Execution Model（执行模型）
+# Execution Model（执行模型）
 
 import kvspace篇-03-代码指令的布局格式
 
-## 13. CLI 装载与执行模型
+## CLI 装载与执行模型
 
-### 13.1 lib 树与装载（fix-033/034/039）
+### lib 树与装载（fix-033/034/039）
 
 **lib 树**：`kvlang layoutrwir` 将多个 `.kv` 文件拼接为单一源→parse→lower→写入 `/lib/`。
 每个 `lib name { }` 块形成一个 lib 节点，每个 lib 有且仅有一个 `init` 函数（init 体 + 顶层代码合并）。
@@ -37,7 +37,7 @@ def init() -> () {
 - 源码存储：`WriteFunc` 写入 `/lib/<pkg>.<name>.src`（fix-034），与指令树同目录
 - 无 `import` 关键字——lib 树即全局命名空间，跨 lib 调用走全路径 `/lib/{lib}.{func}()`
 
-### 13.2 函数调用机制：HandleCall / HandleReturn
+### 函数调用机制：HandleCall / HandleReturn
 
 kvlang 没有"返回值"——传统"返回值"的正确表述是：**HandleReturn 把被调方帧的写参槽值，写回到调用方帧的指定路径**。
 
@@ -94,7 +94,7 @@ kv.Set(parentFrame + "/sum", value)
 **TCO（goto/br）**：不建子帧，仅 Unlink + ExtIndex 换帧根 extindex 指向目标块（.rootfunc 保持根函数名）。
 **顶层调用（Bootstrap）**：frameRoot 即 callPC，直接 ExtIndex frameRoot → funcKey。
 
-### 13.3 与传统 VM 的关键差异
+### 与传统 VM 的关键差异
 
 | | 传统 VM | kvlang |
 |--|---------|--------|

@@ -1,9 +1,8 @@
-# Chapter 5: Control Flow（控制流）
+# Control Flow（控制流）
 
+## 控制流的 KV 寻址优势
 
-## 4. 控制流的 KV 寻址优势
-
-### 4.1 label 即路径
+### label 即路径
 
 ```
 def 分支示例(flag, X) -> (R) {
@@ -27,7 +26,7 @@ label `then` 不是符号表条目，是 KV 路径段：
 
 `goto(merge)` → `PC = funcRoot + "/merge/[0,0]"` → **零查表，零计算，纯字符串拼接**。
 
-### 4.2 label = 无参 call
+### label = 无参 call
 
 ```
 goto(merge)  ≡  call(父函数/merge)   ← 相同语义，不同语法
@@ -35,7 +34,7 @@ goto(merge)  ≡  call(父函数/merge)   ← 相同语义，不同语法
 
 block 就是无参函数。控制流统一为 `call` + `return`，无需 `jmp`/`br`/`goto` 等额外原语。lower 阶段将 `goto`/`br` 降级为 `call(block_label)`，kvcpu 不感知结构化控制流。
 
-### 4.3 与传统对比
+### 与传统对比
 
 | 操作 | x86 | Python | kvlang |
 |------|-----|--------|--------|

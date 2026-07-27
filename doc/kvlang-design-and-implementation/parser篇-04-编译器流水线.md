@@ -1,7 +1,7 @@
-# Chapter 6: Compiler Pipeline（编译器流水线）
+# Compiler Pipeline（编译器流水线）
 
 
-## 5. 编译器/解释器架构对比
+## 编译器/解释器架构对比
 
 ### Python
 
@@ -48,7 +48,7 @@
 - **指令在 KV 树中**，通过 `kv.Get` 获取，不是内存数组
 - **label block = 无参函数**，控制流统一为 call/return
 
-### 5.1 编译器前端流水线
+### 编译器前端流水线
 
 kvlang 编译器前端走标准流水线：**`Source → Scanner.Scan() → []Token → Parser → *ast.File`**。
 核心设计决策：**块结构由消费 LBrace/RBrace Token 自然追踪，杜绝 `strings.Count/Index` 做语法判断**。
@@ -56,6 +56,6 @@ kvlang 编译器前端走标准流水线：**`Source → Scanner.Scan() → []To
 文件单向依赖链 `file.go → stmt.go → inst.go → scanner.go`。错误收集不首错即止——`parser.errors []Diagnostic` 累积全量诊断。
 
 
-### 5.2 AST 类型标记——Quote 字段
+### AST 类型标记——Quote 字段
 
 `Expr.Quote` 区分字符串字面量和变量名，替代旧的 `"` 前缀 hack。parser 将 scanner 的 token Quote 信息保留到 AST，`Flat()` 在 KV 传输层加 `"` 前缀，`stringPrec` 用 `escapeString` 还原源码形式。数字字面量（如 `-5`）不再被误引号包裹。
