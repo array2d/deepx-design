@@ -28,7 +28,7 @@ VM 运行时会为它管理的对象生成**内置变量（系统变量）**，�
 | 键 | 机制 | 代码位置 | 语义 |
 |----|------|---------|------|
 | *(帧根 extindex)* | extindex | `Stack` / `HandleCall:ExtIndex` / `HandleReturn:UnLink` | 帧根本身是 extindex → `/lib/<pkg>.<name>` 只读指令区；局部变量存帧根下 |
-| `.rootfunc` | String | `HandleCall:Set` / `Bootstrap:Set` / `resolveLabel:Get` / `debugFuncName:Get` | 帧对应函数名；TCO 复用帧时**不更新**（保持根函数名，供 `resolveLabel` 裸标签解析） |
+| `.rootfunc` | String | `HandleCall:Set` / `Bootstrap:Set` / `resolveLabel:Get` / `debugFuncName:Get` | 帧对应函数名；TCO（Tail Call Optimization，尾调用优化：goto/br 不建新帧仅换 extindex）复用帧时**不更新**（保持根函数名，供 `resolveLabel` 裸标签解析） |
 | `.ro` | String | `FrameRO` / `HandleCall:Set` / `Bootstrap:Set` | 只读参数名单（逗号分隔），kvcpu 写槽检查用（fix-027；无参函数不写） |
 | `.rparam/<name>` | String | `RParam` / `HandleCall:Set` / `Bootstrap:Set` | 读参重定向：存调用方值的绝对路径；CPU 读参时从此路径直读，零拷贝 |
 | `.wparam/<name>` | String | `WParam` / `HandleCall:Set` | 写参重定向：存调用方写目标的绝对路径；CPU 写参时直写此路径，HandleReturn 不再搬运 |

@@ -117,7 +117,7 @@ f3 .wparam/s → /vthread/run/r          ← 写回 init 的 r（最终结果）
 
 **数组流经整条调用链，落点在对齐的写参槽**。f2 创建 `[30, 40]`，写参 `a` 经 f1 的 `.wparam/a` 路由到 `/vthread/run/[0,0]/_`（f1 丢弃槽）。此时 `kvspace get /vthread/run/[0,0]/_` 返回 `int64[2]:30`（tree 显示首元素 30，实际含两个元素）。f3 的 `.rparam/a` 指向完全相同路径——数组在 kvspace 中只存一份，所有帧通过路径别名共享。
 
-**`.rootfunc` 在 TCO 语义中保持根函数名**。每个帧独立记录 `.rootfunc`（此处 f1/f2/f3 各记自己的函数名），即使 TCO 复用帧也不覆盖——`resolveLabel` 靠它解析裸标签。
+**`.rootfunc` 在 TCO（Tail Call Optimization，尾调用优化：goto/br 复用当前帧不建新帧）语义中保持根函数名**。每个帧独立记录 `.rootfunc`（此处 f1/f2/f3 各记自己的函数名），即使 TCO 复用帧也不覆盖——`resolveLabel` 靠它解析裸标签。
 
 ### 观察源码：`kvspace tree /lib`
 
