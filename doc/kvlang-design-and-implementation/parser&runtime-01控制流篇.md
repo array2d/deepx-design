@@ -74,6 +74,45 @@ while (found == 0) {                      goto(_while_2)
                                           }
 ```
 
+### for 循环
+
+`for (v in path) { body }` 降级为四块：init/cond/body/exit。`kvhas` 检查索引是否存在，`kvat` 取值。
+
+```
+# 源                                       # lower 后
+for (v in ./items) {                       goto(_for_init_1)
+    v -> sum                               _for_init_1: {
+}                                              -1 -> _N;  goto(_for_cond_2)
+                                           }
+                                           _for_cond_2: {
+                                               _N + 1 -> _N
+                                               kvhas(./items, _N) -> _M
+                                               br(_M, _for_body_3, _for_exit_4)
+                                           }
+                                           _for_body_3: {
+                                               kvat(./items, _N) -> v;  v -> sum
+                                               goto(_for_cond_2)
+                                           }
+                                           _for_exit_4: { ... }
+```
+
+break/continue 的 loopCtx 与 while 一致：`break → goto exitLabel`，`continue → goto condLabel`。
+
+### 表达式展平
+
+Lower 阶段强制"指令参数必须为叶节点"。复合表达式自动展开为临时槽：
+
+```
+# 源:  print("r =", 10 - 3)
+# →   10 - 3 -> _1;  print("r =", _1)
+```
+
+`flattenNestedCalls` 对嵌套 at/set/算术语义递归展开，违规者在 lower 阶段 panic。
+
+### 内层块提升
+
+嵌套 if/while 产生的 BlockStmt 须从 then/else/body 体内提升到函数顶层兄弟节点（KV 读写码结构要求所有块为同级）。`splitInstsAndBlocks` 分离指令与块，`injectGotoBlocks` 补全提升后缺失的 goto。
+
 ---
 
 # Part 2: Runtime
@@ -230,17 +269,24 @@ def outer():     # 函数调用帧
 
 ## return：显式与隐式
 
-**显式**：opcode `return`。**隐式**：空 opcode。统一读 `.returnpc`。
+**显式**：opcode `return`（无参数——返回值通过写参零拷贝传递）。**隐式**：空 opcode。统一读 `.returnpc`。
 
 ```go
 func HandleReturn(kv, pc) string {
     frameRoot := FrameRoot(pc)
+    if frameRoot == vthreadRoot { return "", "" }  // 顶层 → 线程终态
     returnPC := kv.Get(frameRoot + ".returnpc").Str()
     kv.UnLink(Stack(frameRoot))
     kv.DelTree(frameRoot)
     return returnPC
 }
 ```
+
+## 运行时保护
+
+**栈深度**：`stackDepth(pc)` 统计 `[...]` 段数，超过 256 触发 `RecursionError`。
+
+**读参写保护**：`checkReadOnlyWrites` 在每条指令执行前拦截——裸名写槽命中帧 `.ro` 名单 → `ReadOnlyError` 异常终止。`set` 的 `base` 本体回写（`set(a, i, v) -> a`）豁免。
 
 ## HandleCall
 
@@ -262,10 +308,22 @@ func HandleReturn(kv, pc) string {
 ## HandleLabel（goto/br）
 
 ```go
-func HandleLabel(kv, pc, labelName string) string {
-    labelFrame := FrameRoot(pc) + "/" + labelName + "/"
+func HandleLabel(kv, pc, labelFullPath string) string {
+    // 1. TCO：当前在 label 帧内且祖先链有同名 label
+    //    → 丢弃中间帧，跳回目标入口（while 循环体跳回条件块即此模式）
+    if extKind(currentFrame) == "label" {
+        for f := currentFrame; extKind(f) == "label"; f = parent(f) {
+            if labelName(f) == targetName {
+                discardFrames(currentFrame, f)
+                kv.Set(CallPC(f), Str(EntryPC(f)))
+                return EntryPC(f)
+            }
+        }
+    }
+    // 2. 新建 label 帧（当前帧下嵌套）
+    labelFrame := currentFrame + "/" + labelName + "/"
     kv.DelTree(labelFrame)
-    kv.ExtIndex(Stack(labelFrame), LibFunc(pkg, parent+"/"+labelName)+"/")  // [label]
+    kv.ExtIndex(Stack(labelFrame), LibFunc(pkg, labelPath)+"/")
     kv.Set([]kvspace.KVPair{
         {labelFrame + ".returnpc", Str(NextPC(pc))},
         {labelFrame + ".callpc",   Str(EntryPC(labelFrame))},
@@ -273,6 +331,8 @@ func HandleLabel(kv, pc, labelName string) string {
     return EntryPC(labelFrame)
 }
 ```
+
+**TCO**：while 每轮迭代 goto 回 `_while_N`，若简单新建 label 帧则无限嵌套。TCO 在祖先链中搜索同名 label，丢弃中间帧直接复用——`_do_N` 末尾 `goto(_while_N)` 等价于弹回条件块入口，O(1) 栈空间。
 
 ## 与传统 VM 的关键差异
 
