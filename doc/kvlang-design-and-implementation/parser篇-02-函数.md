@@ -1,6 +1,5 @@
 # Chapter 4:  函数
 
-import kvlang-design-and-implementation
 
 ## 3. 函数无返回值：只有读参与写参
 
@@ -96,7 +95,7 @@ def sum(arr) -> (acc:int) { acc + arr[0] -> acc }
 
 传统语言的"返回值"本质是**调用栈上的一块内存**——函数执行完毕，这块内存的值被拷贝给调用者。
 
-kvlang 没有线性调用栈，也不存在"返回值"——HandleCall/HandleReturn 的跨帧参数传递机制详见 [runtime篇-04 — 执行模型](runtime篇-04-执行模型.md)。
+kvlang 没有线性调用栈，也不存在"返回值"——函数调用 `f(args) -> s` 是**写参的跨帧路径映射**：被调方帧的写参由 HandleReturn 经 `.wparam` 直写调用方帧的目标路径。
 
 核心要点：函数调用 `f(args) -> s` 不是"f 返回一个值赋给 s"——它是**写参的跨帧路径映射**：被调方帧的写参由 HandleReturn 经 `.wparam` 直写调用方帧的目标路径。整个过程只有槽位间的数据流动，没有"返回值"这个概念。
 

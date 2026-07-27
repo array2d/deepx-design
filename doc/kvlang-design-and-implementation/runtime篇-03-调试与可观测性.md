@@ -3,7 +3,6 @@
 > **TODO**: 本章的 tree 输出和 `.funclib` 引用需同步更新为 extindex 模型（帧根 extindex → /lib/）。
 > 待代码侧 refactor 完成并 `kvspace tree` 输出稳定后逐段修正。
 
-import kvlang-design-and-implementation
 import ch10-system-variables
 
 ## 11. 调试器实战：用 kvspace 静态观察栈与源码

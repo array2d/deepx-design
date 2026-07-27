@@ -1,6 +1,5 @@
 # Chapter 3: Instruction Architecture（指令架构）
 
-import kvlang-design-and-implementation
 
 ## 2. 指令分类
 

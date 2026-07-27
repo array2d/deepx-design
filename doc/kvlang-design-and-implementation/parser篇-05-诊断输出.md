@@ -1,6 +1,5 @@
 # Chapter 12: Diagnostic Output（诊断输出规范）
 
-import kvlang-design-and-implementation
 
 ## 12. 诊断输出规范（logx）
 

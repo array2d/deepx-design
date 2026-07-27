@@ -1,10 +1,7 @@
 # Chapter 1: Design Constitution（设计宪法）
 
-import kvlang-design-and-implementation
 
 ## 0. 设计宪法
-
-核心哲学与设计目标详见 [总篇-01](总篇-01-存算控制流严格分离的kv树计算架构.md)。
 
 ### 0.1 地址空间
 
@@ -33,7 +30,7 @@ kvspace 存储两类数据：**基础数据类型**（int、float、bool、strin
 | GPU 显存 | 计算张量（op-plat 在设备侧持有句柄） |
 | 文件系统/对象存储 | 模型权重、检查点、数据集 |
 
-指令分类详见 [parser篇-01 — 指令架构](parser篇-01-指令架构.md)。
+指令分类见 [parser篇-01](parser篇-01-指令架构.md)。
 
 ### 0.2 模块职责
 
@@ -73,6 +70,4 @@ cmd/kvlang
 | R5 | 破坏单层 IR：新增 HIR/LIR 分层 | kvlang 只一层 IR |
 | R6 | 帧销毁用 List+Del 代替 DelTree | DelTree 是原子操作 |
 | R7 | 模块间循环依赖 | 编译期杜绝 |
-| R8 | `fmt.Fprint*` 直接写 stderr 做诊断 | 所有诊断必须经 `internal/logx`（详见 parser篇-05）；usage/help/格式化除外 |
-
-CLI 装载与执行模型详见 [runtime篇-04 — 执行模型](runtime篇-04-执行模型.md)。诊断输出规范详见 [parser篇-05 — 诊断输出](parser篇-05-诊断输出.md)。
+| R8 | `fmt.Fprint*` 直接写 stderr 做诊断 | 所有诊断必须经 `internal/logx`（见 parser篇-05）；usage/help/格式化除外 |

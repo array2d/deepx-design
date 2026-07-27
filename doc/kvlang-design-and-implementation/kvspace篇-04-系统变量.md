@@ -1,6 +1,5 @@
 # Chapter 10: System Variables（系统变量）
 
-import kvlang-design-and-implementation
 
 ## 12. 系统变量——`X/.var` 影子键
 

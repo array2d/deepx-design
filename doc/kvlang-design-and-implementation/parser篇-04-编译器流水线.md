@@ -1,6 +1,5 @@
 # Chapter 6: Compiler Pipeline（编译器流水线）
 
-import kvlang-design-and-implementation
 
 ## 5. 编译器/解释器架构对比
 
@@ -42,7 +41,7 @@ import kvlang-design-and-implementation
          (WriteBody: 递归写入 /lib/<pkg>.<name>/[i,j] KV 指令树)
 ```
 
-编译产物写入 `/lib/` 后，由 kvcpu 执行——执行模型详见 [runtime篇-04 — 执行模型](runtime篇-04-执行模型.md)。
+编译产物写入 `/lib/` 后，由 kvcpu 执行（见 runtime篇-04）。
 
 关键特征：
 - **PC 是 KV 路径字符串**，不是整数

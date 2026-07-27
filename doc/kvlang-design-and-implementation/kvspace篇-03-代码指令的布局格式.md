@@ -34,7 +34,7 @@ layoutrwir 在五语言中的对标：
   # 所有帧共享 /lib/ 下同一份指令树，零拷贝
 ```
 
-HandleCall/HandleReturn 的完整执行机制（读写参重定向、帧创建/销毁、TCO）详见 [runtime篇-04 — 执行模型](runtime篇-04-执行模型.md)。
+HandleCall/HandleReturn 执行机制见 runtime篇-04。
 
 ### 6.2 与传统 VM 的关键差异
 

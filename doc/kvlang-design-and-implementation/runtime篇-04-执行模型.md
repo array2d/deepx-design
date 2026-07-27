@@ -1,6 +1,5 @@
 # Chapter 13: Execution Model（执行模型）
 
-import kvlang-design-and-implementation
 import kvspace篇-03-代码指令的布局格式
 
 ## 13. CLI 装载与执行模型

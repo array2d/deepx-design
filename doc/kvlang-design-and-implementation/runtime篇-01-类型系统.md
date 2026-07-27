@@ -1,6 +1,5 @@
 # Chapter 8: Type System（类型系统）
 
-import kvlang-design-and-implementation
 
 ## 9. 类型系统
 

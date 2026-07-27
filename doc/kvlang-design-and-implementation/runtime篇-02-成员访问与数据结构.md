@@ -1,6 +1,5 @@
 # Chapter 9: Member Access and Data Structures（成员访问与数据结构）
 
-import kvlang-design-and-implementation
 
 ## 10. `.` 运算符——kvspace 路径的标准成员访问
 

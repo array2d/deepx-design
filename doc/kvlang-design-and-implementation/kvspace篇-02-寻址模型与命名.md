@@ -1,6 +1,5 @@
 # Chapter 2: The Address Space and Naming（寻址模型与命名）
 
-import kvlang-design-and-implementation
 
 ## 1. 寻址模型：KV 路径 vs 内存地址
 

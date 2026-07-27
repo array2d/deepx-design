@@ -1,6 +1,5 @@
 # Chapter 5: Control Flow（控制流）
 
-import kvlang-design-and-implementation
 
 ## 4. 控制流的 KV 寻址优势
 
