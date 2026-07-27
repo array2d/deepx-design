@@ -34,14 +34,14 @@ layoutrwir 在五语言中的对标：
   # 所有帧共享 /lib/ 下同一份指令树，零拷贝
 ```
 
-HandleCall/HandleReturn 执行机制见 runtime篇-04。
+HandleCall/HandleReturn 执行机制见 parser篇-06。
 
 ### 与传统 VM 的关键差异
 
 | | 传统 VM | kvlang |
 |--|---------|--------|
 | 代码传递 | copy 字节码到新栈帧 | **ExtIndex**（所有帧共享 /lib/ 下同一份指令树） |
-| TCO（Tail Call Optimization，尾调用优化：不建新帧仅换 extindex） | 需特殊优化（复用帧 + 重定向参数） | Unlink + ExtIndex，已有的 extindex 机制天然支持 |
+| 帧模型 | 一种帧（call/return） | **两种帧**：函数调用帧 + label 帧（goto/br → `.label/`，详见控制流篇） |
 | 崩溃恢复 | 栈帧在内存，进程死即全失 | PC=路径字符串、`frameRoot=返回点落 KV——重启续跑 |
 | 可观测 | 需调试器 attach | `kvspace tree /vthread/…` 看 extindex 指向、frameRoot 在哪，局部变量直读帧根 |
 

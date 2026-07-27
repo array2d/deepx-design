@@ -41,7 +41,7 @@
          (WriteBody: 递归写入 /lib/<pkg>.<name>/[i,j] KV 指令树)
 ```
 
-编译产物写入 `/lib/` 后，由 kvcpu 执行（见 runtime篇-04）。
+编译产物写入 `/lib/` 后，由 kvcpu 执行（见 parser篇-06）。
 
 关键特征：
 - **PC 是 KV 路径字符串**，不是整数
