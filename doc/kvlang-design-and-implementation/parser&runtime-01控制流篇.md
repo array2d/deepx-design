@@ -185,7 +185,7 @@ Lower 阶段强制"指令参数必须为叶节点"。复合表达式自动展开
 ```go
 func resolveRead(name string, frame string) XValue {
     for f := frame; extKind(f) != "rwfunc"; f = parent(f) {
-        if v := kv.Get(f + "/" + name); !v.IsNil() {
+        if v := kv.Get(f + "/" + name); !v.IsNone() {
             return v
         }
     }
@@ -200,9 +200,9 @@ func extKind(frameRoot string) string {
 
 ```
 # _then_10 内读 mid（_do_3 的局部）：
-kv.Get(_then_10/mid) → nil     extKind(_then_10)="label" → 继续
-kv.Get(_if_9/mid)    → nil     extKind(_if_9)="label"    → 继续
-kv.Get(_else_7/mid)  → nil     extKind(_else_7)="label"  → 继续
+kv.Get(_then_10/mid) → None   extKind(_then_10)="label" → 继续
+kv.Get(_if_9/mid)    → None   extKind(_if_9)="label"    → 继续
+kv.Get(_else_7/mid)  → None   extKind(_else_7)="label"  → 继续
 kv.Get(_do_3/mid)    → 50 ✓    ← 找到，停
 
 # _then_10 内读 lo：

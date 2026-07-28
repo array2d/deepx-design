@@ -36,7 +36,7 @@ h.*key                # at("/tmp", 2) → 读 /tmp/2
 | Go | `h.field` | `h[key]` (map) |
 | JS | `h.field` | `h[key]` |
 
-**与 nil 配合**：`at` 查不到 key 返回 nil。存 `idx+1`（≥1），读时判断 `> 0` 区分"找到/未找到"。O(1) hash map，解锁数百道 LeetCode 题。
+**与 None 配合**：`at` 查不到 key 返回 None。此时用 `has` 判存在更直接。O(1) hash map，解锁数百道 LeetCode 题。
 
 详见 `doc/kvlang/design/kvspace-hash-map.md`。
 
@@ -53,10 +53,10 @@ kvlang 不区分 struct 和 dict。二者在 kvspace 中是**同一种东西：�
 
 kvspace 没有类型边界：同一键族可以同时按 struct 用（静态字段）、按 dict 用（动态 key）、按数组用（整数 key）。静态/动态的区别只存在于**语法层**（`.field` vs `.*key` vs `[i]`），到 `at`/`set` 之后完全消失。
 
-**dict 字面量与类型标记**：`a = { attr1="s1"; attr2=2; attr3=null }` 是键族的一等创建语法——
+**dict 字面量与类型标记**：`a = { attr1="s1"; attr2=2; attr3=None }` 是键族的一等创建语法——
 desugar 为 `dict("attr1", "s1", ...)`，base 键 `a` 写入 `kind="dict"` 的零负载标记值，
-成员写入平坦键族 `a.attr1`、`a.attr2`；值为 `null`（裸名，运行时解析为 nil）的成员**不写入**——
-kvspace 中缺席即 null。dict 标记非 string 值，成员解析自动走按名回退（§10.4）；
+成员写入平坦键族 `a.attr1`、`a.attr2`；值为 `None` 的成员**不写入**——
+kvspace 中缺席即 None。dict 标记非 string 值，成员解析自动走按名回退（§10.4）；
 `at`/`set` 亦显式识别 `kind=="dict"` 的 base 强制路径模式。键值对分隔符为 `;`、换行或逗号，
 对内的 `=` 与赋值算子同形（fix-010）。
 

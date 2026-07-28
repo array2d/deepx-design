@@ -71,7 +71,7 @@ parser error 级诊断拒绝装载；kvcpu 写槽前置检查（帧 `.ro` 名单
 # ❌ 签名撒谎：acc 被写但放在读参侧 → 报错
 def sum(arr, acc:int) -> (r:int) { acc + arr[0] -> acc }
 
-# ✅ 签名诚实：acc 是写参 → 可读（首读 nil=0，fix-017）也可写
+# ✅ 签名诚实：acc 是写参 → 可读可写（须显式初始化，首读 None 拒绝算术）
 def sum(arr) -> (acc:int) { acc + arr[0] -> acc }
 ```
 

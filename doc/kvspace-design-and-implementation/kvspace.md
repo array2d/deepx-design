@@ -6,14 +6,14 @@ KV 树形存储的 Go 客户端 SDK。对应仓库 `github.com/array2d/kvspace-g
 
 ```go
 type KVSpace interface {
-    Get(keys []string) []XValue         // 批量读，缺失返回 null XValue
+    Get(keys []string) []XValue         // 批量读，缺失返回 None XValue
     Set(pairs []KVPair) error           // 批量写，维护目录索引；key 禁止尾斜杠
     List(prefix string) []string         // 列出直接子项
     Del(keys ...string) error           // 精确删除
     DelTree(prefix string) error        // 递归删除；prefix 本身是链接则只删链接
 
     Notify(key string, val XValue) error
-    Watch(key string, timeout time.Duration) XValue  // 超时返回 null XValue
+    Watch(key string, timeout time.Duration) XValue  // 超时返回 None XValue
 
     Mount(target, linkpath string) error // 路径映射 linkpath → target
     Overlay(target, r, w string) error   // overlay：读 w/ → r/ 回退
@@ -24,7 +24,7 @@ type KVSpace interface {
 }
 ```
 
-**Get/Set** 统一批处理，单 key 操作传 `[]string{"k"}`。**Watch** 超时返回 kind=null 的 XValue。
+**Get/Set** 统一批处理，单 key 操作传 `[]string{"k"}`。**Watch** 超时返回 None XValue（kind=""）。
 
 ## XValue 类型系统
 
@@ -91,7 +91,7 @@ const (
 
 // XValue kind
 const (
-    KindNull    = "null"
+    KindNone    = ""
     KindInt64   = "int64"    // + int8/16/32, uint8/16/32/64, float32/64
     KindString  = "string"
     KindBytes   = "bytes"

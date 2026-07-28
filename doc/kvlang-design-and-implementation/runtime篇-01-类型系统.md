@@ -47,7 +47,7 @@ type XValue struct {
 | `"dict"` | `Dict()` | 零负载类型标记——成员存为平坦键族 `base.名` |
 | `"array"` | `Array(elems)` | 定长同类型数组，raw 连续存储 |
 | `"rwir"` | `Rwir(v)` | 指令槽文本引用（kvlang 内部） |
-| `"null"` | `Null()` | 显式 null 值；`IsNil()` 对 `""` 和 `"null"` 均返回 true |
+| `""` | `None()` | None 值（kind 为空字符串）；`IsNone()` 返回 true |
 
 **kind 铁律——禁止别名**。kvlang **不支持** kind 别名。`"int"`、`"float"` 等短名在任何代码路径中均非法——必须使用全称 `"int64"`、`"float64"` 等上表所列的精确字符串。kind 字符串是跨语言类型契约的一部分（kvspace-go → kvspace-cpp → kvregion shm → op-gpu 张量 dtype），别名会破坏所有 kind-aware 中间件的匹配逻辑。违反此规则的代码（如 `kvspace.Raw("int", ...)`）必须在 code review 中拒绝。
 
@@ -61,13 +61,23 @@ type XValue struct {
 
 | 字段 | 大小 | 说明 |
 |------|------|------|
-| `kind_len` | 1B | kind_name 字节数（1~127，0 表示 null） |
+| `kind_len` | 1B | kind_name 字节数（1~127，0 表示 None） |
 | `kind_name` | N B | vtype name，`[a-zA-Z0-9_]` 字符集 |
 | `arraylength` | 4B | 数组元素数，uint32 LE，默认=1（单值） |
 | `raw_len` | 4B | raw_value 字节数，uint32 LE |
 | `raw_value` | M B | 类型化原始数据 |
 
-`IsNil()` 编码为 nil（零字节）。`DecodeXValue` 内部 copy raw bytes（owned 语义，防止与 Redis 读缓冲区共享）。
+`IsNone()` 编码为 nil（零字节）。`DecodeXValue` 内部 copy raw bytes（owned 语义，防止与 Redis 读缓冲区共享）。
+
+### 变量名即地址，有地址即有 XValue——未赋值即 None
+
+kvlang 代码中的每一个变量名，就是该中间变量在 kvspace 中的**相对地址**。声明/首次出现一个变量名，即在当前帧下分配一个 KV slot（如 `/vthread/<vtid>/<frame>/x`）。因此：
+
+- **有变量名 ⇒ 有地址**（相对地址也是地址）
+- **有地址 ⇒ 有 XValue**（每个 slot 对应一个 XValue）
+- **未赋任何值 ⇒ 该 XValue 为 None**（kind=`""`，`IsNone()` 返回 true）
+
+这意味着 kvlang 中不存在"未定义变量"——变量一经 parser 识别，其 slot 就已存在。区别仅在于该 slot 的 XValue 是 None 还是持有类型化数据。None 参与算术/比较/类型转换直接 TypeError，迫使代码显式初始化。
 
 **访问器分级**：
 - **宽容读取器**：`Int64()` 按 kind 实际宽度解码 + 符号扩展（对标 Go `reflect.Value.Int`），`Uint64()` 同理。算术/比较走宽容读取器。
@@ -91,7 +101,7 @@ uint64(18446744073709551615)   # uint64 上界完整往返
 | float→int 截断向零 | 五语言一致 |
 | 窄化 = 补码回绕（`uint8(-1)`=255、`int32(2³¹)`=-2³¹） | Go 转换 / Rust `as` / C |
 | (2⁶³, 2⁶⁴-1] 无小数正整数字面量 → uint64 | — |
-| nil 输入按 int 0 | fix-017 |
+| None 输入直接 TypeError | strict None — 拒绝 None 参与数值运算 |
 
 **声明精度是存储/传输类型**：`int16(-2) -> n; n -> /x` 后 `kvspace get /x` 显示 `int16:-2`——
 精度进入 TLV kind 落盘，kvspace-cpp / kvregion shm / 张量 dtype 的跨语言类型契约由此成立。
@@ -103,7 +113,7 @@ uint64(18446744073709551615)   # uint64 上界完整往返
 1. **int ∧ int → 原生 int64 运算与比较**，绝不经 float64 中转（fix-020：float64 尾数仅 53 位，
    `maxint64 - 1`、`2⁵³+1` 曾经必然丢值/误判相等）；溢出 = 补码回绕（同 C/Go）
 2. **任一侧 float → float64 提升**；混合比较为 C 式 double 提升（`3 == 3.0` 为 true）
-3. **nil 数值语境 = int 0**（fix-017，与 `nil==0` 比较、`AsBool(nil)=false` 同族）
+3. **None 参与算术直接 TypeError**（strict None：拒绝 None 隐式转换为 0）
 
 读取器契约（kvspace-go）：`Int64()`/`Uint64()` 是**宽容读取器**（对标 Go `reflect.Value.Int/Uint`：
 按 kind 实际宽度解码 + 符号扩展）；`Int8()`/`Float32()` 等是严格 kind 精确访问器。
@@ -121,7 +131,7 @@ uint64(18446744073709551615)   # uint64 上界完整往返
 | `0`/`1` 整数 | **panic** — 必须写 `!= 0` | ✅ if/while 接受 | ✅ | ✅ | ❌ |
 | 非空字符串 | **panic** — 必须写 `!= ""` | ✅ | ✅ | N/A | N/A |
 | `"false"` 字符串 | **panic** | ✅ 真 | ✅ 真 | N/A | N/A |
-| null | **panic** | ✅ falsy | ✅ falsy | N/A | ❌ |
+| None | **panic** | ✅ falsy | ✅ falsy | N/A | ❌ |
 
 **为什么比五语言更严格？**
 
