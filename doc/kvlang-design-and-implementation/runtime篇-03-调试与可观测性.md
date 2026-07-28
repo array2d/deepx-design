@@ -13,7 +13,7 @@ import ch10-system-variables
 
 ```bash
 cd kvlang
-kvlang run --debug tutorial/03-debugger/chain_array.kv
+kvlang {vid} --debug tutorial/03-debugger/chain_array.kv
 # VM 在 debugger() 处暂停，进程阻塞等待 agent 命令
 ```
 
@@ -44,35 +44,35 @@ def init() -> () {
 
 ### 观察栈帧：`kvspace tree /vthread`
 
-暂停后，`kvspace tree /vthread` 输出（仅保留 `run` vthread 和相关函数）：
+暂停后，`kvspace tree /vthread` 输出（仅保留 `{vid}` vthread 和相关函数）：
 
 ```
-/vthread/run
+/vthread/{vid}
 ├── .funclib → def init() -> ()
 │   ├── [0]  rwir:f1  rwir:r
 │   ├── [1]  rwir:r   rwir:print
 │   └── [2]  rwir:return
 ├── .rootfunc  string:init
-├── .pc        string:/vthread/run/[0,0]/[0,0]/[1,0]/[0,0]
-├── .status    string:running
+├── .pc        string:/vthread/{vid}/[0,0]/[0,0]/[1,0]/[0,0]
+├── .status    string:{vid}ning
 ├── .debugger  string:break
 └── [0,0]                                    ← f1 调用帧
     ├── .funclib → def f1() -> (s:int64)
     │   ├── [0]  rwir:f2  rwir:_  int64:0
     │   └── [1]  int64:0  rwir:return
     ├── .rootfunc  string:f1
-    ├── .rparam/s  → /vthread/run/r          ← 读参 s → init 的 r
-    ├── .wparam/s  → /vthread/run/r          ← 写参 s → init 的 r
+    ├── .rparam/s  → /vthread/{vid}/r          ← 读参 s → init 的 r
+    ├── .wparam/s  → /vthread/{vid}/r          ← 写参 s → init 的 r
     ├── [0,0]                                ← f2 调用帧
     │   ├── .funclib → def f2() -> (a:int64, s:int64)
     │   │   ├── [0]  int:30  int:40  rwir:array  int64:0
     │   │   ├── [1]  rwir:f3  int64:0  int64:0
     │   │   └── [2]  int64:0  int64:0  rwir:return
     │   ├── .rootfunc  string:f2
-    │   ├── .rparam/a  → /vthread/run/[0,0]/_
-    │   ├── .rparam/s  → /vthread/run/r
-    │   ├── .wparam/a  → /vthread/run/[0,0]/_
-    │   ├── .wparam/s  → /vthread/run/r
+    │   ├── .rparam/a  → /vthread/{vid}/[0,0]/_
+    │   ├── .rparam/s  → /vthread/{vid}/r
+    │   ├── .wparam/a  → /vthread/{vid}/[0,0]/_
+    │   ├── .wparam/s  → /vthread/{vid}/r
     │   └── [1,0]                            ← f3 调用帧（当前暂停位置）
     │       ├── .funclib → def f3() -> (a:int64, s:int64)
     │       │   ├── [0]  rwir:debugger       ← PC 在此
@@ -81,20 +81,20 @@ def init() -> () {
     │       │   ├── [3]  rwir:v0  rwir:v1  rwir:+  int64:0
     │       │   └── [4]  int64:0  int64:0  rwir:return
     │       ├── .rootfunc  string:f3
-    │       ├── .rparam/a  → /vthread/run/[0,0]/_
-    │       ├── .rparam/s  → /vthread/run/r
-    │       ├── .wparam/a  → /vthread/run/[0,0]/_
-    │       └── .wparam/s  → /vthread/run/r
+    │       ├── .rparam/a  → /vthread/{vid}/[0,0]/_
+    │       ├── .rparam/s  → /vthread/{vid}/r
+    │       ├── .wparam/a  → /vthread/{vid}/[0,0]/_
+    │       └── .wparam/s  → /vthread/{vid}/r
     └── _  int64[2]:30                       ← f1 的丢弃槽，存放 f2 产出的数组
 ```
 
 ### 关键发现
 
-**PC 字符串即调用栈**。PC = `/vthread/run/[0,0]/[0,0]/[1,0]/[0,0]`，逐段解读：
+**PC 字符串即调用栈**。PC = `/vthread/{vid}/[0,0]/[0,0]/[1,0]/[0,0]`，逐段解读：
 
 | 路径段 | 含义 |
 |--------|------|
-| `/vthread/run/` | vthread 根帧（init） |
+| `/vthread/{vid}/` | vthread 根帧（init） |
 | `[0,0]/` | init 指令 [0,0] 发起的调用 → **f1 帧** |
 | `[0,0]/` | f1 指令 [0,0] 发起的调用 → **f2 帧** |
 | `[1,0]/` | f2 指令 [1,0] 发起的调用 → **f3 帧** |
@@ -102,20 +102,20 @@ def init() -> () {
 
 这与传统 VM 的"栈深度=帧数"完全同构——区别只在于 kvlang 用路径深度而非整数偏移。
 
-**`.funclib` 软链 = 零拷贝共享指令树**。四个帧的 `.funclib` 均 Link 到 `/lib/<name>`。关键：f3 帧出现在两个位置——`/vthread/run/[0,0]/[0,0]/[1,0]`（f2 的子帧）和 f2 `.funclib` 展开树中——这是因为 `kvspace tree` 跟随软链展开了 `/lib/f3` 的内容。实际上 KV 存储中只存一份指令树，所有帧通过 Link 共享。
+**`.funclib` 软链 = 零拷贝共享指令树**。四个帧的 `.funclib` 均 Link 到 `/lib/<name>`。关键：f3 帧出现在两个位置——`/vthread/{vid}/[0,0]/[0,0]/[1,0]`（f2 的子帧）和 f2 `.funclib` 展开树中——这是因为 `kvspace tree` 跟随软链展开了 `/lib/f3` 的内容。实际上 KV 存储中只存一份指令树，所有帧通过 Link 共享。
 
 **`.rparam` / `.wparam` 实现零拷贝跨帧传参**。注意 f3 帧中没有任何局部变量槽——执行尚未到 `v0`/`v1` 的创建。但读写参的路由已经建立：
 
 ```
-f3 .rparam/a → /vthread/run/[0,0]/_    ← f1 的丢弃槽（数组在此）
-f3 .rparam/s → /vthread/run/r          ← init 的 r 槽
-f3 .wparam/a → /vthread/run/[0,0]/_    ← 写回 f1 丢弃槽（不保留）
-f3 .wparam/s → /vthread/run/r          ← 写回 init 的 r（最终结果）
+f3 .rparam/a → /vthread/{vid}/[0,0]/_    ← f1 的丢弃槽（数组在此）
+f3 .rparam/s → /vthread/{vid}/r          ← init 的 r 槽
+f3 .wparam/a → /vthread/{vid}/[0,0]/_    ← 写回 f1 丢弃槽（不保留）
+f3 .wparam/s → /vthread/{vid}/r          ← 写回 init 的 r（最终结果）
 ```
 
-这不是"传值"——是**路径别名**。f3 执行 `at(a, 0)` 时，kvcpu 经 `.rparam/a` 拿到绝对路径 `/vthread/run/[0,0]/_`，直接 Get 该键，零中间拷贝。同理 f3 写 `s` 时经 `.wparam/s` 直接 Set 到 `/vthread/run/r`。
+这不是"传值"——是**路径别名**。f3 执行 `at(a, 0)` 时，kvcpu 经 `.rparam/a` 拿到绝对路径 `/vthread/{vid}/[0,0]/_`，直接 Get 该键，零中间拷贝。同理 f3 写 `s` 时经 `.wparam/s` 直接 Set 到 `/vthread/{vid}/r`。
 
-**数组流经整条调用链，落点在对齐的写参槽**。f2 创建 `[30, 40]`，写参 `a` 经 f1 的 `.wparam/a` 路由到 `/vthread/run/[0,0]/_`（f1 丢弃槽）。此时 `kvspace get /vthread/run/[0,0]/_` 返回 `int64[2]:30`（tree 显示首元素 30，实际含两个元素）。f3 的 `.rparam/a` 指向完全相同路径——数组在 kvspace 中只存一份，所有帧通过路径别名共享。
+**数组流经整条调用链，落点在对齐的写参槽**。f2 创建 `[30, 40]`，写参 `a` 经 f1 的 `.wparam/a` 路由到 `/vthread/{vid}/[0,0]/_`（f1 丢弃槽）。此时 `kvspace get /vthread/{vid}/[0,0]/_` 返回 `int64[2]:30`（tree 显示首元素 30，实际含两个元素）。f3 的 `.rparam/a` 指向完全相同路径——数组在 kvspace 中只存一份，所有帧通过路径别名共享。
 
 **`.rootfunc` 在 TCO（Tail Call Optimization，尾调用优化：goto/br 复用当前帧不建新帧）语义中保持根函数名**。每个帧独立记录 `.rootfunc`（此处 f1/f2/f3 各记自己的函数名），即使 TCO 复用帧也不覆盖——`resolveLabel` 靠它解析裸标签。
 
@@ -178,18 +178,18 @@ s0=4 │                return
 
 ```bash
 # 栈帧全貌
-kvspace tree /vthread/run
+kvspace tree /vthread/
 
 # 当前 PC
-kvspace get /vthread/run/.pc
+kvspace get /vthread/{vid}/.pc
 
 # 当前帧（按 PC 截取 frameRoot，再 tree）
-# PC=/vthread/run/[0,0]/[0,0]/[1,0]/[0,0] → frameRoot=/vthread/run/[0,0]/[0,0]/[1,0]
-kvspace tree /vthread/run/[0,0]/[0,0]/[1,0]
+# PC=/vthread/{vid}/[0,0]/[0,0]/[1,0]/[0,0] → frameRoot=/vthread/{vid}/[0,0]/[0,0]/[1,0]
+kvspace tree /vthread/{vid}/[0,0]/[0,0]/[1,0]
 
 # 查看某帧的读写参路由
-kvspace tree /vthread/run/[0,0]/[0,0]/[1,0]/.rparam
-kvspace tree /vthread/run/[0,0]/[0,0]/[1,0]/.wparam
+kvspace tree /vthread/{vid}/[0,0]/[0,0]/[1,0]/.rparam
+kvspace tree /vthread/{vid}/[0,0]/[0,0]/[1,0]/.wparam
 
 # 查看全部已加载函数
 kvspace tree /lib
