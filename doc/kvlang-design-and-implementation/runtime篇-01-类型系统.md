@@ -5,6 +5,20 @@
 
 kvlang 是**严格类型语言**。所有变量、参数、返回值在编译期必须有确定的类型——不允许无类型变量，不允许运行时类型隐式改变。
 
+### 数字类型：无 float/int，只有具体位宽类型
+
+**kvlang 没有 `float`、没有 `int`。** 不存在名为 `float` 或 `int` 的类型，只存在携带具体位数的数字类型：
+
+| 类别 | 类型 |
+|------|------|
+| 有符号整数 | `int8` `int16` `int32` `int64` |
+| 无符号整数 | `uint8` `uint16` `uint32` `uint64` |
+| IEEE 754 浮点 | `float32` `float64` |
+
+**设计理由**：位数是类型契约的核心部分。`int64` 跨 kvspace-go（Go）→ kvspace-cpp（C++）→ kvregion shm（C struct）→ op-gpu tensor dtype 传播时，每一层都依赖精确的位数信息。`float` 和 `int` 这类模糊名称在不同语言/平台上映射到不同位数（C `int` 在 ILP32 为 32 位、LP64 为 32 位；Python `int` 是任意精度），破坏跨语言类型契约。
+
+**实现约束**：XValue kind 字符串只接受上表所列的 10 个精确名称。`"int"`、`"float"` 等短名在任何代码路径中均为非法 kind，code review 必须拒绝。
+
 ### 类型归属规则
 
 类型的归属分为两级：
