@@ -110,3 +110,21 @@ uint64(18446744073709551615)   # uint64 上界完整往返
 消费方（算术/display/String）一律走宽容读取器。
 
 语义回归锚点：`tutorial/01-basics/precision.kv`（提升与精度真相，17 断言）、`numtypes.kv`（十算子，12 断言）。
+
+### Bool 铁律
+
+**bool 只能是 `true`/`false`，禁止一切隐式 coerce。** 这比主流语言更严格，是刻意设计。
+
+| 输入 | kvlang | Python | JS | C | Go |
+|------|--------|--------|-----|---|-----|
+| `true`/`false` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `0`/`1` 整数 | **panic** — 必须写 `!= 0` | ✅ if/while 接受 | ✅ | ✅ | ❌ |
+| 非空字符串 | **panic** — 必须写 `!= ""` | ✅ | ✅ | N/A | N/A |
+| `"false"` 字符串 | **panic** | ✅ 真 | ✅ 真 | N/A | N/A |
+| null | **panic** | ✅ falsy | ✅ falsy | N/A | ❌ |
+
+**为什么比五语言更严格？**
+
+kvlang 的设计目标是"运行时代码即数据"——所有状态落在 KV 空间，外部 agent 和插件可读写。隐式 coerce 意味着 `if (x)` 的行为取决于 x 的运行时 kind，agent 在不知道 x 类型的情况下无法判定控制流走向。强制显式比较（`x != 0`、`x != ""`）使控制流条件在 KV 层面自描述：br 指令的 cond 槽永远是 bool，读即知真假。
+
+**实现**：`AsBool` (coerce.go) 仅接受 `kind=="bool"`，其他 kind 直接 panic。`bool()` 构造器将任意值转为 bool（`bool(0)`=false、`bool(1)`=true、`bool("")`=false），但这是**显式转换**，不用在条件位置。
