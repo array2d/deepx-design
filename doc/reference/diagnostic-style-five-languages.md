@@ -159,7 +159,7 @@ Traceback (most recent call last):
   File "/tmp/run_type.py", line 1, in <module>
     x = "hello" + 42
         ~~~~~~~~^~~~
-TypeError: can only concatenate str (not "int") to str
+TypeError: can only concatenate string (not "int") to string
 ```
 
 **格式**：`Traceback (most recent call last):` 起头 → 栈帧列表（`File "path", line N, in name` + 源码 + 表达式下划线 `~~~~^~~~`）→ `ExceptionType: message`。

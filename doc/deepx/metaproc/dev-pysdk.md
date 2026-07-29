@@ -63,24 +63,24 @@ class KVSpace:
         self.redis = redis.from_url(redis_url)
 
     # === 基本 KV 操作 ===
-    def get(self, key: str):
+    def get(self, key: string):
         val = self.redis.get(key)
         return json.loads(val) if val else None
 
-    def set(self, key: str, value):
+    def set(self, key: string, value):
         return self.redis.set(key, json.dumps(value))
 
-    def delete(self, key: str):
+    def delete(self, key: string):
         return self.redis.delete(key)
 
-    def exists(self, key: str) -> bool:
+    def exists(self, key: string) -> bool:
         return self.redis.exists(key) > 0
 
-    def keys(self, pattern: str) -> list:
+    def keys(self, pattern: string) -> list:
         return self.redis.keys(pattern)
 
     # === 函数源码写入 ===
-    def set_func(self, name: str, signature: str, instructions: list):
+    def set_func(self, name: string, signature: string, instructions: list):
         """
         将函数定义写入 /src/func/<name>/
 
@@ -94,7 +94,7 @@ class KVSpace:
         for i, inst in enumerate(instructions):
             self.set(f"/src/func/{name}/{i}", inst)
 
-    def get_func(self, name: str) -> dict:
+    def get_func(self, name: string) -> dict:
         """读取函数定义 (调试用)"""
         sig = self.get(f"/src/func/{name}")
         insts = []
@@ -108,15 +108,15 @@ class KVSpace:
         return {"signature": sig, "instructions": insts}
 
     # === Vthread 管理 ===
-    def alloc_vtid(self) -> str:
+    def alloc_vtid(self) -> string:
         """分配新的 vthread ID"""
-        return str(self.redis.incr("/sys/vtid_counter"))
+        return string(self.redis.incr("/sys/vtid_counter"))
 
-    def get_vthread(self, vtid: str) -> dict:
+    def get_vthread(self, vtid: string) -> dict:
         """获取 vthread 状态"""
         return self.get(f"/vthread/{vtid}")
 
-    def wait_vthread(self, vtid: str, timeout: float = 30.0,
+    def wait_vthread(self, vtid: string, timeout: float = 30.0,
                      poll_interval: float = 0.05) -> dict:
         """
         等待 vthread 执行完成
@@ -136,10 +136,10 @@ class KVSpace:
         raise TimeoutError(f"vthread {vtid} timeout after {timeout}s")
 
     # === 命令队列 ===
-    def push(self, queue: str, value):
+    def push(self, queue: string, value):
         return self.redis.rpush(queue, json.dumps(value))
 
-    def pop(self, queue: str, timeout: int = 0):
+    def pop(self, queue: string, timeout: int = 0):
         result = self.redis.blpop(queue, timeout)
         return json.loads(result[1]) if result else None
 ```
@@ -157,12 +157,12 @@ class FuncCache:
         self._hashes: dict = {}
 
     @staticmethod
-    def _compute_hash(signature: str, instructions: list) -> str:
+    def _compute_hash(signature: string, instructions: list) -> string:
         import hashlib
         content = signature + "".join(instructions)
         return hashlib.md5(content.encode()).hexdigest()
 
-    def set_if_changed(self, name: str, signature: str, instructions: list) -> bool:
+    def set_if_changed(self, name: string, signature: string, instructions: list) -> bool:
         """
         仅在函数内容变化时才写入 KV 空间
 
@@ -176,7 +176,7 @@ class FuncCache:
         self._hashes[name] = h
         return True
 
-    def invalidate(self, name: str):
+    def invalidate(self, name: string):
         """强制下次写入 (用于调试)"""
         self._hashes.pop(name, None)
 ```
@@ -188,8 +188,8 @@ class VThreadCreator:
     def __init__(self, kv: KVSpace):
         self.kv = kv
 
-    def create(self, entry_func: str, bindings: dict,
-               entry_inst: str = "[0,0]") -> str:
+    def create(self, entry_func: string, bindings: dict,
+               entry_inst: string = "[0,0]") -> string:
         """
         创建 vthread 并通知 VM
 
@@ -223,7 +223,7 @@ class VThreadCreator:
 
         # 写入实参: [0,-2], [0,-3], ...
         for i, (param_name, param_value) in enumerate(bindings.items()):
-            self.kv.set(f"{base}/{-i-2}", str(param_value))
+            self.kv.set(f"{base}/{-i-2}", string(param_value))
 
         # 默认返回值槽位
         self.kv.set(f"{base}/1", "./out")                   # [0,1] = 返回值
@@ -246,7 +246,7 @@ def add(A, B) -> C:
     send_ir({"op": "add", "A": A, "B": B, "C": C})
 
 # === 改造后 (KVSpace 模式) ===
-def add(kv: KVSpace, A: str, B: str, out_name: str):
+def add(kv: KVSpace, A: string, B: string, out_name: string):
     """
     注册 add 函数源码到 KV 空间
 
@@ -269,7 +269,7 @@ def add(kv: KVSpace, A: str, B: str, out_name: str):
 ### 任务 P5: Tensor 元信息辅助
 
 ```python
-def tensor_meta(dtype: str, shape: list, device: str = "gpu0") -> dict:
+def tensor_meta(dtype: string, shape: list, device: string = "gpu0") -> dict:
     """构造 tensor 元信息 (用于 newtensor 请求)"""
     dtype_sizes = {
         "f16": 2, "f32": 4, "f64": 8, "bf16": 2,
