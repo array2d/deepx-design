@@ -2,7 +2,7 @@
 
 > 锚定于 kvlang-deep-dive（根设计文档）——每次 deep-dive 更新后需验证本文与实现一致。
 > 验证：`python3 tutorial/test.py && python3 tutorial/error_test.py`
-> 恢复于 2026-07-19（git: a5a37eb），重写以对齐当前实现（fix-005/009/010/011/015/020/021/025/026/031）。
+> 更新于 2026-07-30：scope 帧重设计（todo-036），print/println Go 风格（print 无空格无换行，println 有空格有换行）。
 
 ## 词法
 
@@ -20,16 +20,22 @@ comment = "#" { char } newline
 ## 程序结构
 
 ```
-program     = [ init_block ] { top_level_stmt | function }
               (* 无 import 关键字——lib 树即全局命名空间，跨 lib 调用走全路径 /lib/{lib}.{func}() *)
 
 init_block  = "init" "{" { statement } "}"
 
-top_level_stmt = instruction | function_call
-               (* 顶层无嵌套控制流; if/while/for 必须在 def 内 *)
+              (* 声明签名，无体，解释器直执行 *)
 
-function    = "def" ident "(" [ param_list ] ")" [ "->" "(" [ param_list ] ")" ]
+top_level_stmt = instruction | function_call
+               (* 顶层无嵌套控制流; if/while/for 必须在 函数内 *)
+
+function    = "rwfunc" ident "(" [ param_list ] ")" [ "->" "(" [ param_list ] ")" ]
               "{" { statement } "}"
+
+rwir_decl   = "rwir" ident "(" [ param_list ] ")" [ "->" "(" [ param_list ] ")" ]
+              (* 声明签名，无体，解释器直执行 *)
+
+              (* 声明签名，无体，解释器直执行 *)
 
 param_list  = param { "," param }
 param       = ident [ ":" ident ]      (* type annotation 可选 *)
@@ -87,22 +93,32 @@ dict_entry   = ident "=" expr                          (* { k=v; k2=v2 } *)
 
 ```
 if_stmt     = "if" "(" expr ")" "{" { statement } "}"
+
+              (* 声明签名，无体，解释器直执行 *)
               [ "else" "{" { statement } "}" ]
+
+              (* 声明签名，无体，解释器直执行 *)
 
 while_stmt  = "while" "(" expr ")" "{" { statement } "}"
 
+              (* 声明签名，无体，解释器直执行 *)
+
 for_stmt    = "for" "(" ident "in" ident ")" "{" { statement } "}"
+
+              (* 声明签名，无体，解释器直执行 *)
               (* for (x in arr) — arr 为键族/数组 *)
 
 block_stmt  = ident ":" "{" { statement } "}"         (* label: { ... } *)
+
+              (* 声明签名，无体，解释器直执行 *)
 ```
 
 ## 内建函数（部分）
 
 ```
-builtin_call = ("abs" | "neg" | "sign" | "pow" | "sqrt" | "exp" | "log"
-              | "min" | "max" | "print" | "cerr" | "input"
-              | "int" | "float" | "bool"
+builtin_call = ("print" | "println" | "cerr" | "input"
+              | "abs" | "neg" | "sign" | "pow" | "sqrt" | "exp" | "log"
+              | "min" | "max"
               | "int8" | "int16" | "int32" | "int64"
               | "uint8" | "uint16" | "uint32" | "uint64"
               | "float32" | "float64"
@@ -113,6 +129,8 @@ builtin_call = ("abs" | "neg" | "sign" | "pow" | "sqrt" | "exp" | "log"
               | "debugger") "(" [ arg_list ] ")"
 
 (* min/max 支持变参: min(a,b,c,...), fix-026 *)
+(* print  : Go 风格——无空格拼接，不追加换行 *)
+(* println: Go 风格——空格分隔，追加换行 *)
 (* debugger(): 内联暂停, 非调试模式 no-op, fix-031 *)
 (* / : 两侧 int → 整除(C 风格); 任一侧 float → 浮除, fix-020 *)
 (* s[i] 读返单字符字符串, 越界返 ""; s[i]="X" 单字符替换写回新串, fix-025 *)
