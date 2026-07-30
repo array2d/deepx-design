@@ -27,7 +27,7 @@ layoutrwir 在五语言中的对标：
     /lib/main.add/[0,0] = "+"      /lib/main.add/[0,-1] = "A"
     /lib/main.add/[0,-2] = "B"     /lib/main.add/[0,1] = "C"
     /lib/main.add/[1,0] = "return"
-    /lib/main.add                 = "def add(A:int,B:int)->(C:int)"  (签名)
+    /lib/main.add                 = "rwfunc add(A:int,B:int)->(C:int)"  (签名)
 
 调用时：
   kv.ExtIndex(frameRoot+"/", "/lib/main.add/")  # 帧根本身 → /lib/ 指令树
@@ -41,7 +41,7 @@ HandleCall/HandleReturn 执行机制见 parser篇-06。
 | | 传统 VM | kvlang |
 |--|---------|--------|
 | 代码传递 | copy 字节码到新栈帧 | **ExtIndex**（所有帧共享 /lib/ 下同一份指令树） |
-| 帧模型 | 一种帧（call/return） | **两种帧**：函数调用帧 + label 帧（goto/br → `.label/`，详见控制流篇） |
+| 帧模型 | 一种帧（call/return） | **两种帧**：rwfunc（函数调用）+ scope（goto/br，详见控制流篇） |
 | 崩溃恢复 | 栈帧在内存，进程死即全失 | PC=路径字符串、`frameRoot=返回点落 KV——重启续跑 |
 | 可观测 | 需调试器 attach | `kvspace tree /vthread/…` 看 extindex 指向、frameRoot 在哪，局部变量直读帧根 |
 

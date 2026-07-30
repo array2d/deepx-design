@@ -70,4 +70,4 @@ kvlang 没有 `&` 取址运算符——**代码中对象的变量名，本身就
 
 这解释了为什么全局变量 `/counter` 零成本——绝对指针不经过帧前缀拼接。也解释了为什么数组能作为参数传递——`flattenNestedCalls` 将 `[1,2,3]` 展开为临时变量，再将临时变量（持有 XValue）作为普通参数传递。
 
-**参数不得同名（fix-032）**：变量名即指针——同一帧内两个同名参数将指向同一个 kvspace 位置。读参列表内部、写参列表内部、以及读写列表之间均不可同名。`def f(A:int) -> (A:int)` 签名本身非法——A 不能同时是读参和写参。parser `checkParamDup` 阻断源码路径，VM `checkDupParams` 兜底 agent 直写 KV 构造的非法签名。error_case 锚点：`tutorial/error_cases/read_only/dup_param.kv`。
+**参数不得同名（fix-032）**：变量名即指针——同一帧内两个同名参数将指向同一个 kvspace 位置。读参列表内部、写参列表内部、以及读写列表之间均不可同名。`rwfunc f(A:int) -> (A:int)` 签名本身非法——A 不能同时是读参和写参。parser `checkParamDup` 阻断源码路径，VM `checkDupParams` 兜底 agent 直写 KV 构造的非法签名。error_case 锚点：`tutorial/error_cases/read_only/dup_param.kv`。

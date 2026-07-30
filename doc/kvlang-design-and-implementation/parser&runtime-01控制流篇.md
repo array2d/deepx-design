@@ -1,49 +1,12 @@
-# Frame Model & Call Stack（帧模型与调用栈）
+# 控制流：Scope 帧模型
 
-# Part 1: Parser & Layoutrwir
+> 更新于 2026-07-30：todo-036 scope 帧重设计。旧 label/TCO/HandleLabel 已删除。
 
-## XValue Kind 三层
-
-指令架构三层，`/lib/` 下 XValue kind 直接体现：
-
-| Kind | `/lib/` 示例 | 含义 |
-|------|-------------|------|
-| `rwir` | `/lib/func/[0,0] = "+"` | 原子指令读写槽 ，kvcpu可直接用buildin解析运行|
-| `rwfunc` | `/lib/func` | 函数定义（复合 rwir） ，需要先建立extindex，映射/lib/pkg/func的指令序列|
-| `label` | `/lib/func/_then_10` | Label 块 ，需要先建立extindex，映射/lib/pkg/func/label的指令序列|
-
-帧类型不靠路径模式判断——读帧根 extindex target 的 XValue.Kind() 即知。`rwfunc` = 函数帧边界，`label` = label 帧。
-
-## WriteFunc
-
-```go
-func WriteFunc(kv kvspace.KVSpace, pkg string, fn *ast.Func) {
-    kv.DelTree(keytree.LibFunc(pkg, fn.Sig.Name))
-    kv.Set([]kvspace.KVPair{
-        {keytree.LibFunc(pkg, fn.Sig.Name), kvspace.Raw("rwfunc", []byte(fn.Sig.String()))},
-    })
-    WriteBody(kv, pkg, fn.Sig.Name, fn.Body, typeMap)     // rwir 指令槽
-    RegisterBlocks(kv, pkg, fn.Sig.Name, fn.Body)         // label 块
-}
-```
-
-## RegisterBlocks
-
-```go
-func RegisterBlocks(kv kvspace.KVSpace, pkg, parent string, body []ast.Stmt) {
-    for _, st := range body {
-        if b, ok := st.(*ast.BlockStmt); ok {
-            key := keytree.LibFunc(pkg, parent+"/"+b.Label)
-            kv.Set([]kvspace.KVPair{{key, kvspace.Raw("label", nil)}})
-            RegisterBlocks(kv, pkg, parent+"/"+b.Label, b.Body)
-        }
-    }
-}
-```
+# Part 1: Parser & Layout
 
 ## Lower Pass
 
-Lower 将 `if`/`while`/`for` 降级为 BlockStmt + `br`/`goto`。**变量无编译期改写**——label 帧自身提供作用域，帧路径即前缀。
+Lower 将 `if`/`while`/`for` 降级为 ScopeStmt + `br`/`goto`。goto/br 目标用短名（如 `_while_2`）。
 
 ```
 # 源                                       # lower 后
@@ -61,6 +24,7 @@ while (found == 0) {                      goto(_while_2)
 }                                         _if_5: {
                                               br(hit, _then_6, _else_7)
                                           }
+                                          _then_6: { ... }
                                           _else_7: {
                                               mid < target -> too_low
                                               goto(_if_9)
@@ -68,279 +32,148 @@ while (found == 0) {                      goto(_while_2)
                                           _if_9: {
                                               br(too_low, _then_10, _else_11)
                                           }
-                                          _then_10: {
-                                              mid + 1 -> lo
-                                              goto(_merge_12)
-                                          }
+                                          _then_10: { mid + 1 -> lo; goto(_merge_12) }
 ```
 
-### for 循环
+- 所有 ScopeStmt 为函数体平级兄弟节点
+- `splitInstsAndBlocks` 分离指令与块，`injectGotoBlocks` 补全提升后缺失的 goto
+- break/continue → `goto exitLabel` / `goto condLabel`
 
-`for (v in path) { body }` 降级为四块：init/cond/body/exit。`kvhas` 检查索引是否存在，`kvat` 取值。
+## WriteFunc
 
-```
-# 源                                       # lower 后
-for (v in ./items) {                       goto(_for_init_1)
-    v -> sum                               _for_init_1: {
-}                                              -1 -> _N;  goto(_for_cond_2)
-                                           }
-                                           _for_cond_2: {
-                                               _N + 1 -> _N
-                                               kvhas(./items, _N) -> _M
-                                               br(_M, _for_body_3, _for_exit_4)
-                                           }
-                                           _for_body_3: {
-                                               kvat(./items, _N) -> v;  v -> sum
-                                               goto(_for_cond_2)
-                                           }
-                                           _for_exit_4: { ... }
+```go
+func WriteFunc(kv kvspace.KVSpace, pkg string, fn *ast.Func) {
+    kv.DelTree(keytree.LibFunc(pkg, fn.Sig.Name))
+    kv.Set([]kvspace.KVPair{
+        {keytree.LibFunc(pkg, fn.Sig.Name), kvspace.Rwfunc(...)},
+    })
+    WriteBody(kv, pkg, fn.Sig.Name, fn.Body, typeMap)
+    // 不再需要 RegisterBlocks——scope 帧不建 extindex，指令通过父帧 extindex + scope 前缀 key 查找
+}
 ```
 
-break/continue 的 loopCtx 与 while 一致：`break → goto exitLabel`，`continue → goto condLabel`。
+## 指令布局
 
-### 表达式展平
+**函数指令**：`/lib/<func>/[i,j]`（标准格式，供 extindex 解析）
 
-Lower 阶段强制"指令参数必须为叶节点"。复合表达式自动展开为临时槽：
+**Scope 指令**：`/lib/<func>/<scopeName>[i,j]`（flat key，scope 名直接拼在 coord 前）
 
 ```
-# 源:  print("r =", 10 - 3)
-# →   10 - 3 -> _1;  print("r =", _1)
+/lib/sum_to/[0,0]              ← 函数体指令
+/lib/sum_to/[1,0]              ← goto _while_2
+/lib/sum_to/_while_2[0,0]      ← scope 条件块
+/lib/sum_to/_while_2[1,0]      ← br(bool, _do_3, _exit_4)
+/lib/sum_to/_do_3[0,0]         ← scope 循环体
 ```
-
-`flattenNestedCalls` 对嵌套 at/set/算术语义递归展开，违规者在 lower 阶段 panic。
-
-### 内层块提升
-
-嵌套 if/while 产生的 BlockStmt 须从 then/else/body 体内提升到函数顶层兄弟节点（KV 读写码结构要求所有块为同级）。`splitInstsAndBlocks` 分离指令与块，`injectGotoBlocks` 补全提升后缺失的 goto。
 
 ---
 
 # Part 2: Runtime
 
-## 三种路径角色
+## 帧类型
 
-| 路径 | 角色 | 帧根 extindex → | Kind |
-|------|------|-----------------|------|
-| `/vthread/1/` | **虚线程根** = 入口函数帧 | `/lib/init` | `rwfunc` |
-| `/vthread/1/[0,0]/` | **函数调用帧** | `/lib/B` | `rwfunc` |
-| `/vthread/1/[0,0]/_do_3/` | **Label 帧** | `/lib/B/_do_3` | `label` |
-
-虚线程根是 Bootstrap 创建的特例——它兼做入口函数的帧，但本质也是函数帧（kind=`rwfunc`）。通用函数调用帧由 `call` 创建。
-
-## 两种帧
-
-| | 函数调用帧 (rwfunc) | Label 帧 |
-|--|-------------------|---------|
-| 路径 | `callPC` (`/vthread/N/.../[K,0]`) | 当前帧下 `/labelName/` |
+| | rwfunc 帧 | scope 帧 |
+|--|----------|---------|
 | 创建者 | `call(func, args...)` | `goto(label)` / `br(cond, t, f)` |
-| `.rparam` | ✅ | ❌ |
-| `.wparam` | ✅ | ❌ |
-| `.ro` | ✅ | ❌ |
-| 销毁 | `return` 时 DelTree | `return` 时 DelTree（同函数帧） |
+| extindex | ✅ → /lib/<func>/ | ❌ 不建 extindex |
+| `.rparam` / `.wparam` | ✅ | ❌ |
+| `.lib` 标记 | ✅ | ❌ |
+| `.returnpc` / `.callpc` | ✅ | ✅ |
+| 隐式 return | DelTree 整帧 | DelTree 自身，变量不可被父 scope 访问 |
+| 帧位置 | callPC | rwfunc 帧下平级子目录 |
 
 ```
-# 函数调用帧（B 被 A 调用）
-/vthread/1/[0,0]/                   ← 子帧根 = callPC
-├── extindex → /lib/B   [rwfunc]    ← 帧类型：函数
-├── .returnpc = /vthread/1/[1,0]
-├── .callpc   = /vthread/1/[0,0]/[3,0]
-├── .rparam/a → ...   .wparam/c → ...
-├── .ro = "a,b"
-├── local_vars...
-└── _do_3/                          ← 此帧内的 label 子帧
-
-# Label 帧
-/vthread/1/[0,0]/_do_3/             ← label 帧根
-├── extindex → /lib/B/_do_3 [label] ← 帧类型：label
-├── .returnpc = /vthread/1/[0,0]/_while_2/[2,0]
-├── .callpc   = /vthread/1/[0,0]/_do_3/[4,0]
-├── mid = 50, hit = false, s = 101  ← label 局部
-└── _if_5/                          ← 嵌套 label 帧
-    ├── extindex → /lib/B/_if_5 [label]
-    └── .returnpc = /vthread/1/[0,0]/_do_3/[5,0]
+/vthread/1/[0,0]/                   ← rwfunc 帧（call 创建）
+├── .lib = /lib/sum_to              ← rwfunc 标记（funcFrameRoot 检测用）
+├── .rparam/n → ...                 ← 读参零拷贝
+├── .wparam/total → ...             ← 写参零拷贝
+├── .returnpc / .callpc
+├── total = 0, i = 1                ← 局部变量（所有变量均在 rwfunc 帧）
+├── _while_2/                       ← scope 帧（goto/br 创建，平级）
+│   ├── .callpc                     ← 每次重入更新
+│   └── .returnpc                   ← 首次设置，不覆写
+├── _do_3/                          ← scope 帧（平级）
+│   ├── .callpc
+│   └── .returnpc
+└── _exit_4/                        ← scope 帧（平级）
 ```
 
-**Label 帧栈**：`goto` 创建 label 子帧，与 call 创建函数子帧机制一致。隐式 return 读 `.returnpc` 弹栈。
+## 变量作用域
 
-```
-/vthread/1/[0,0]/                   ← 函数调用帧（B 的栈帧）
-├── lo = 1, hi = 100, target = 73
-├── _while_2/       [label]
-│   └── _1 = true
-├── _do_3/          [label]
-│   ├── s = 101, mid = 50, hit = false
-│   └── _if_5/      [label]
-│       └── _else_7/ [label]
-│           ├── too_low = true
-│           └── _if_9/ [label]
-│               └── _then_10/ [label]
-```
+**所有变量存储于 rwfunc 帧 Stack**。`funcFrameRoot` 沿帧树向上查找 `.lib` 标记识别 rwfunc 帧。
 
-## 变量作用域：递归向上查找 + extKind 判边界
+- 写：`resolveWriteSlot` 先查 `.wparam` 重定向，否则写 rwfunc Stack
+- 读：`resolveReadValue` 先查 `.rparam` 重定向，再查 rwfunc Stack
+- scope 帧不存储变量；scope 退出 DelTree 自身
+- 子 scope 可访问父变量（都在 rwfunc 帧），scope 退出后变量不可被父访问（scope 帧已删除）
 
-**写**：`-> name` 写入当前帧。
+## Decode：scope 感知 key 构造
 
-**读**：`name` 从当前帧递归向上查。帧类型由帧根 extindex → `/lib/` 的 XValue.Kind() 判定：`"rwfunc"` = 函数帧边界，`"label"` = 继续向上。O(d)，d = label 深度。
+scope 帧不建 extindex，Decode 手动拼接 scope 前缀 key：
 
 ```go
-func resolveRead(name string, frame string) XValue {
-    for f := frame; extKind(f) != "rwfunc"; f = parent(f) {
-        if v := kv.Get(f + "/" + name); !v.IsNone() {
-            return v
-        }
+func Decode(kv, linkBase, pc string) (*Rwir, error) {
+    scopePrefix, lookupBase := scopePrefixAndBase(linkBase)
+    // scopePrefix: "" (rwfunc 帧) 或 "_while_2" / "_while_2._if_1" (嵌套)
+    // lookupBase: rwfunc 帧 Stack（供 extindex 解析）
+
+    key := scopePrefix + "[0,0]"
+    kv.Get(lookupBase, [key, ...])
+    // extindex → /lib/func/_while_2[0,0]
+}
+```
+
+## HandleScope（goto/br）
+
+```go
+func HandleScope(kv, pc, scopeName string) string {
+    rwRoot := rwfuncFrameRoot(kv, FrameRoot(pc))
+    scopeFrame := rwRoot + "/" + scopeName + "/"
+
+    if !exists(scopeFrame + ".callpc") {
+        MkIndexRecursive(scopeFrame)
+        // scope 不建 extindex
     }
-    return kv.Get(funcFrame + "/" + name)
-}
-
-func extKind(frameRoot string) string {
-    extTarget := getExtIndexTarget(frameRoot)
-    return kv.Get(extTarget).Kind()  // "rwfunc" | "label"
+    // .returnpc 首次设置，不覆写（保持原始返回路径）
+    // .callpc 每次更新
+    return EntryPC(scopeFrame)
 }
 ```
 
-```
-# _then_10 内读 mid（_do_3 的局部）：
-kv.Get(_then_10/mid) → None   extKind(_then_10)="label" → 继续
-kv.Get(_if_9/mid)    → None   extKind(_if_9)="label"    → 继续
-kv.Get(_else_7/mid)  → None   extKind(_else_7)="label"  → 继续
-kv.Get(_do_3/mid)    → 50 ✓    ← 找到，停
+**关键**：scope 帧均为 rwfunc 帧的平级子目录，不复用 extindex。`.returnpc` 仅首次设置防止 while 循环退出路径错误。
 
-# _then_10 内读 lo：
-... (各层 label, kind="label" → 继续)
-kv.Get(/vthread/1/[0,0]/lo) → 1 ✓  extKind="rwfunc" → 边界
-```
+## HandleScopeReturn
 
-### 函数边界 = 铁幕
-
-**不同函数的局部变量不可互相访问。** extKind 返回 `"rwfunc"` 即终止向上查找，不跨越 call 边界。
-
-```
-/vthread/1/                         ← 虚线程根 [rwfunc] = 入口函数 A 的帧
-├── x = 1                           ← A 的局部
-├── [0,0]/                          ← call B [rwfunc]
-│   ├── y = 2                       ← B 的局部
-│   │   （读 y→✓, 读 x→✗）          ← B 不能读 A 的局部（跨 rwfunc 边界）
-│   └── [3,0]/                      ← B 内 call C [rwfunc]
-│       └── （读 z→✓, 读 y→✗）      ← C 不能读 B 的局部
-└── [1,0]/                          ← A 内 call D [rwfunc]
-    └── （读 w→✓, 读 y→✗）          ← D 不能读 B 的局部
-```
-
-跨函数访问变量必须**显式传参或传指针**——读参/写参（`.rparam`/`.wparam`）或绝对路径 `/`。
-
-### 与 Python 对齐
-
-```python
-x = 10           # 全局 / 入口函数帧
-
-def outer():     # 函数调用帧
-    y = 1        # outer 局部
-    def inner(): # 函数调用帧
-        z = 2    # inner 局部
-        print(z) # → inner 帧 ✓
-        print(y) # → outer 帧 ✓（闭包）
-        print(x) # → 全局 ✓（LEGB）
-```
-
-| 读变量 | Python | kvlang |
-|--------|--------|--------|
-| 当前帧 | ✅ 局部变量 | ✅ 当前帧 |
-| 父帧（嵌套） | ✅ 闭包捕获 | ✅ 递归向上（extKind="label"→继续） |
-| 函数帧 | ✅ LEGB 直到 builtins | ✅ extKind="rwfunc"→终止 |
-| **跨 call 边界** | ❌ 不可访问 | ❌ extKind="rwfunc"→截断 |
+scope 帧隐式 return：读 `.returnpc` → DelTree 自身 → 返回父上下文。
 
 ## 系统变量
 
-| 变量 | 位置 | 更新 | 职责 |
-|------|------|------|------|
-| `.pc` | vthread 级 | 每 op | 外部视图 |
-| `.callpc` | 每帧 | 每 op | 本帧执行进度 |
-| `.returnpc` | 每帧 | 创建时一次 | 返回地址 |
-
-```
-/vthread/1.pc = /vthread/1/[0,0]/_do_3/[4,0]
-
-/vthread/1/[0,0]/.callpc = /vthread/1/[0,0]/[3,0]
-/vthread/1/[0,0]/.returnpc = /vthread/1/[1,0]
-
-/vthread/1/[0,0]/_do_3/.callpc = /vthread/1/[0,0]/_do_3/[4,0]
-/vthread/1/[0,0]/_do_3/.returnpc = /vthread/1/[0,0]/_while_2/[2,0]
-```
-
-## return：显式与隐式
-
-**显式**：opcode `return`（无参数——返回值通过写参零拷贝传递）。**隐式**：空 opcode。统一读 `.returnpc`。
-
-```go
-func HandleReturn(kv, pc) string {
-    frameRoot := FrameRoot(pc)
-    if frameRoot == vthreadRoot { return "", "" }  // 顶层 → 线程终态
-    returnPC := kv.Get(frameRoot + ".returnpc").Str()
-    kv.UnLink(Stack(frameRoot))
-    kv.DelTree(frameRoot)
-    return returnPC
-}
-```
-
-## 运行时保护
-
-**栈深度**：`stackDepth(pc)` 统计 `[...]` 段数，超过 256 触发 `RecursionError`。
-
-**读参写保护**：`checkReadOnlyWrites` 在每条指令执行前拦截——裸名写槽命中帧 `.ro` 名单 → `ReadOnlyError` 异常终止。`set` 的 `base` 本体回写（`set(a, i, v) -> a`）豁免。
+| 变量 | 位置 | 职责 |
+|------|------|------|
+| `.pc` | vthread 级 | 外部视图 |
+| `.callpc` | 每帧 | 本帧执行进度 |
+| `.returnpc` | 每帧 | 返回地址 |
+| `.lib` | rwfunc 帧 | extindex 目标路径（funcFrameRoot 检测用） |
 
 ## HandleCall
 
-```
-1. frameRoot = callPC                     # /vthread/1/[0,0]
-2. kv.ExtIndex(frameRoot+"/", "/lib/B/")  # extindex → /lib/B [rwfunc]
-3. 写 .returnpc = NextPC(pc)
-4. 写 .callpc   = EntryPC(frameRoot)
-5. 读参零拷贝：.rparam/<name> → 调用方值位置
-6. 写参零拷贝：.wparam/<name> → 调用方写目标位置
-```
+1. frameRoot = callPC，ExtIndex → /lib/<func>/
+2. 写 `.lib` = funcKey，`.returnpc`，`.callpc`
+3. 读参零拷贝：`.rparam/<name>` → 调用方值位置
+4. 写参零拷贝：从 inst.Writes 直接读 write target（不从帧路径查）
 
-**没有返回值**。`f(args) -> s` 是写参的跨帧路径映射：被调方 `.wparam` 直写调用方帧。
+## Bootstrap
 
-### Bootstrap
-
-虚线程根 `/vthread/1/`，extindex → 入口函数 [rwfunc]。无父帧，不写 `.returnpc`。
-
-## HandleLabel（goto/br）
-
-```go
-func HandleLabel(kv, pc, labelFullPath string) string {
-    // 1. TCO：当前在 label 帧内且祖先链有同名 label
-    //    → 丢弃中间帧，跳回目标入口（while 循环体跳回条件块即此模式）
-    if extKind(currentFrame) == "label" {
-        for f := currentFrame; extKind(f) == "label"; f = parent(f) {
-            if labelName(f) == targetName {
-                discardFrames(currentFrame, f)
-                kv.Set(CallPC(f), Str(EntryPC(f)))
-                return EntryPC(f)
-            }
-        }
-    }
-    // 2. 新建 label 帧（当前帧下嵌套）
-    labelFrame := currentFrame + "/" + labelName + "/"
-    kv.DelTree(labelFrame)
-    kv.ExtIndex(Stack(labelFrame), LibFunc(pkg, labelPath)+"/")
-    kv.Set([]kvspace.KVPair{
-        {labelFrame + ".returnpc", Str(NextPC(pc))},
-        {labelFrame + ".callpc",   Str(EntryPC(labelFrame))},
-    })
-    return EntryPC(labelFrame)
-}
-```
-
-**TCO**：while 每轮迭代 goto 回 `_while_N`，若简单新建 label 帧则无限嵌套。TCO 在祖先链中搜索同名 label，丢弃中间帧直接复用——`_do_N` 末尾 `goto(_while_N)` 等价于弹回条件块入口，O(1) 栈空间。
+虚线程根 `/vthread/1/`，extindex → 入口函数。写 `.lib` = funcKey。
 
 ## 与传统 VM 的关键差异
 
 | | 传统 VM | kvlang |
 |--|---------|--------|
 | 代码传递 | copy 字节码 | **ExtIndex**（共享 /lib/ 指令树） |
-| 帧模型 | 一种帧 | **两种帧**：rwfunc + label |
-| 帧类型判定 | — | **extindex target XValue.Kind()**：rwfunc/label |
-| 变量作用域 | 词法作用域 | **递归向上查找**：extKind="label"→继续，"rwfunc"→停 |
+| 帧模型 | 一种帧 | **两种帧**：rwfunc + scope |
+| rwfunc 帧检测 | — | **`.lib` 标记**（避免 extindex 层叠干扰） |
+| 变量作用域 | 词法作用域 | **rwfunc 帧集中存储**，funcFrameRoot 定位 |
+| scope 指令查找 | — | **Decode scope 前缀 key** + 父帧 extindex |
 | 返回地址 | 硬件栈 | **`.returnpc`** 显式记录 |
 | 崩溃恢复 | 内存栈，死即全失 | PC + frameRoot 落 KV——重启续跑 |

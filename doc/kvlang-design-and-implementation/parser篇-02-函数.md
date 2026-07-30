@@ -30,7 +30,7 @@ kvlang 函数只有两种参数：
 ### 写槽即位置
 
 ```kv
-def add(A: int, B: int) -> (C: int) {
+rwfunc add(A: int, B: int) -> (C: int) {
     A + B -> C            # 写参 C 在被调方帧中写入
 }
 ```
@@ -69,10 +69,10 @@ parser error 级诊断拒绝装载；kvcpu 写槽前置检查（帧 `.ro` 名单
 
 ```kv
 # ❌ 签名撒谎：acc 被写但放在读参侧 → 报错
-def sum(arr, acc:int) -> (r:int) { acc + arr[0] -> acc }
+rwfunc sum(arr, acc:int) -> (r:int) { acc + arr[0] -> acc }
 
 # ✅ 签名诚实：acc 是写参 → 可读可写（须显式初始化，首读 None 拒绝算术）
-def sum(arr) -> (acc:int) { acc + arr[0] -> acc }
+rwfunc sum(arr) -> (acc:int) { acc + arr[0] -> acc }
 ```
 
 | 变量类型 | 签名位置 | 写法 |
@@ -83,12 +83,12 @@ def sum(arr) -> (acc:int) { acc + arr[0] -> acc }
 
 ### 定义与调用的参数同名规则
 
-**定义函数时，读参和写参不得同名**。变量名即指针——同一帧内同名参数指向同一个 kvspace 位置，读参写参同名意味着一个 slot 既是输入又是输出，破坏 rwir 数据流方向。`def f(A:int) -> (A:int)` 签名本身非法——parser `checkParamDup` 拒绝装载，VM `checkDupParams` 兜底 agent 直写 KV 构造的非法签名。
+**定义函数时，读参和写参不得同名**。变量名即指针——同一帧内同名参数指向同一个 kvspace 位置，读参写参同名意味着一个 slot 既是输入又是输出，破坏 rwir 数据流方向。`rwfunc f(A:int) -> (A:int)` 签名本身非法——parser `checkParamDup` 拒绝装载，VM `checkDupParams` 兜底 agent 直写 KV 构造的非法签名。
 
 **调用函数时，同一变量可以同时出现在读槽和写槽**。`f(x) -> x` 完全合法——x 作为实参传入读槽（消费旧值），同时作为写槽目标接收结果（产出新值）。这是两个不同的 kvspace 路径：读槽 `.rparam/x` 指向调用方 x，写槽 `.wparam/x` 也指向调用方 x——HandleCall 建立路由时两者独立解析，不冲突。典型用例是就地更新：
 
 ```kv
-def inc(val:int) -> (out:int) { val + 1 -> out }
+rwfunc inc(val:int) -> (out:int) { val + 1 -> out }
 
 x = 5
 inc(x) -> x    # ✅ 调用合法：x 同时出现在读槽和写槽，x 从 5 变为 6

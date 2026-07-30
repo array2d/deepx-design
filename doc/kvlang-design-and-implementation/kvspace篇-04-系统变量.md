@@ -23,12 +23,14 @@ VM 运行时会为它管理的对象生成**内置变量（系统变量）**，�
 | `.debugger.pause` | Notify 队列 | `VThreadDebuggerPause` / `debugNotifyPause` | CPU → agent 暂停事件（JSON `{"pc","func","frame","op"}`） |
 | `.debugger.resume` | Notify 队列 | `VThreadDebuggerResume` / `debugWaitResume` | agent → CPU 恢复命令：`step`/`continue`/`abort` |
 
-**帧对象**（宿主 = frameRoot，调用协议；vthread 根即顶层帧；代码 `keytree/frame.go` + `layoutrwir.go`）：
+**帧对象**（宿主 = frameRoot，调用协议；vthread 根即顶层帧；代码 `keytree/frame.go` + `layout/layout.go`）：
 
 | 键 | 机制 | 代码位置 | 语义 |
 |----|------|---------|------|
-| *(帧根 extindex)* | extindex | `Stack` / `HandleCall:ExtIndex` / `HandleReturn:UnLink` | 帧根本身是 extindex → `/lib/<pkg>.<name>` 只读指令区；局部变量存帧根下 |
-| `.rootfunc` | String | `HandleCall:Set` / `Bootstrap:Set` / `resolveLabel:Get` / `debugFuncName:Get` | 帧对应函数名；TCO（Tail Call Optimization，尾调用优化：goto/br 不建新帧仅换 extindex）复用帧时**不更新**（保持根函数名，供 `resolveLabel` 裸标签解析） |
+| *(帧根 extindex)* | extindex | `Stack` / `HandleCall:ExtIndex` / `HandleReturn:UnLink` | rwfunc 帧根 extindex → `/lib/<pkg>.<name>` 只读指令区；scope 帧不建 extindex |
+| `.lib` | String | `HandleCall:Set` / `Bootstrap:Set` / `funcFrameRoot:Get` | rwfunc 帧的 lib 路径（如 `/lib/sum_to`），`funcFrameRoot` 用于识别 rwfunc 帧边界 |
+| `.callpc` | String | `CallPC` / `HandleCall:Set` / `HandleScope:Set` | 每帧执行进度（每 op 更新）；scope 帧每次重入更新 |
+| `.returnpc` | String | `ReturnPC` / `HandleCall:Set` / `HandleScope:Set` | 返回地址（帧创建时固化）；scope 帧仅首次设置，重入不覆写 |
 | `.ro` | String | `FrameRO` / `HandleCall:Set` / `Bootstrap:Set` | 只读参数名单（逗号分隔），kvcpu 写槽检查用（fix-027；无参函数不写） |
 | `.rparam/<name>` | String | `RParam` / `HandleCall:Set` / `Bootstrap:Set` | 读参重定向：存调用方值的绝对路径；CPU 读参时从此路径直读，零拷贝 |
 | `.wparam/<name>` | String | `WParam` / `HandleCall:Set` | 写参重定向：存调用方写目标的绝对路径；CPU 写参时直写此路径，HandleReturn 不再搬运 |
@@ -57,7 +59,7 @@ VM 运行时会为它管理的对象生成**内置变量（系统变量）**，�
 
 | 形态 | 例 | 性质 | 所有权 |
 |------|----|------|--------|
-| `X/名`（`/` + 普通名） | `/vthread/7/[3,0]`、`…/then/[0,0]` | 结构：帧、指令槽、label 块 | VM |
+| `X/名`（`/` + 普通名） | `/vthread/7/[3,0]`、`/_while_2/[0,0]` | 结构：帧、指令槽、scope 帧 | VM |
 | `X.名`（`.` 平坦键） | `/c0.next`、`frame/obj.prop` | 用户数据成员（键族） | 用户 |
 | `X/.名`（`/` + dot 名） | `/vthread/7/.pc`、`arr/.shape` | 系统变量（影子元数据） | VM |
 

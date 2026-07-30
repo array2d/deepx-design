@@ -15,31 +15,30 @@ import kvspace篇-03-代码指令的布局格式
 
 **跨 lib 调用**：全路径 `/lib/{childlib}.{func}()`，无 `import` 关键字——lib 树已在 kvspace 中，调用即路径。
 
-## `def init() -> () { }` 初始化（fix-036）
+## `rwfunc init() -> () { }` 初始化（fix-036）
 
-裸顶层代码自动封装为隐式 `def init() -> () { }`。
+裸顶层代码自动封装为隐式 `rwfunc init() -> () { }`。
 
 ```kv
-lib math { def sum(A:int, B:int) -> (C:int) { A + B -> C } }
-def init() -> () { /lib/math.sum(3, 4) -> s; print(s) }
+lib math { rwfunc sum(A:int, B:int) -> (C:int) { A + B -> C } }
+rwfunc init() -> () { /lib/math.sum(3, 4) -> s; print(s) }
 ```
 
 - `lib name { }` 借鉴 C++ `namespace` / Rust `mod`
 - 每个 lib 注册在 `/lib/<name>.{func}`（`/lib/math.sum`、`/lib/math.init`）
-- 无 lib 包裹的 def 属于匿名 lib（路径 `/lib/.{func}`）
+- 无 lib 包裹的 rwfunc 属于匿名 lib（路径 `/lib/.{func}`）
 - 源码存储：`WriteFunc` 写入 `/lib/<pkg>.<name>.src`（fix-034）
 
-## XValue Kind 三层
+## XValue Kind
 
-`/lib/` 下按指令架构三层分配 XValue kind：
+`/lib/` 下 XValue kind：
 
 | Kind | 示例 | 写入者 |
 |------|------|--------|
 | `rwir` | `/lib/func/[0,0] = "+"` | `writeStmt`（指令读写槽） |
 | `rwfunc` | `/lib/func` | `WriteFunc`（函数签名） |
-| `label` | `/lib/func/_then_10` | `RegisterBlocks`（label 块） |
 
-帧类型判定：读帧根 extindex target → XValue.Kind() → `rwfunc` = 函数帧边界，`label` = label 帧。
+帧类型判定：`funcFrameRoot` 沿帧树向上查找 `.lib` 标记 → `rwfunc` 帧；无 `.lib` → scope 帧。详见 **[控制流篇](parser&runtime-01控制流篇.md)**。
 
 ## 帧模型与调用栈
 
