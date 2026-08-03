@@ -369,7 +369,97 @@ static uint64_t bump_alloc(kshm_t *h, size_t sz) {
 
 ---
 
-## 七、三个实现的代码质量与移植性
+## 七、`/` 分隔符带来的 ART 优化
+
+### 7.1 核心洞察：目录节点 = ART 前缀节点，不需要单独插入
+
+插入三个文件 key 到空树：
+
+```
+Step 1: Insert /a/b/c (leaf)
+  树: node4{ partial="/a/b/c", hasValue=true }    // 唯一的叶子
+
+Step 2: Insert /a/b/d (leaf)
+  common("/a/b/c", "/a/b/d") = "/a/b/" (5 bytes)
+  分裂:
+    node4{ partial="/a/b/" }                     // ← 公共前缀节点
+      ├─ 'c' → leaf("/a/b/c")
+      └─ 'd' → leaf("/a/b/d")
+
+Step 3: Insert /a/e (leaf)
+  common("/a/b/", "/a/e") = "/a/" (3 bytes)
+  再分裂:
+    node4{ partial="/a/" }                       // ← 根目录节点
+      ├─ 'b' → node4{ partial="/a/b/" }         // ← 子目录节点
+      │          ├─ 'c' → leaf
+      │          └─ 'd' → leaf
+      └─ 'e' → leaf("/a/e")
+```
+
+**三步完成，没有一次 `art_insert("/a/", ...)` 调用。树自动长出了三层目录结构。**
+
+### 7.2 优化一：目录 Index TLV 完全消除
+
+kvspace-go/art `Set("/a/", TLV("index", "..."))` 是**冗余操作**。目录节点的 children 就是 `node.keys[]`。
+
+```
+旧: List("/a/b/") → art_search("/a/b/")          // 一次搜索
+                   → decodeTLV(index_value)       // TLV 解码
+                   → split("\n")                   // 字符串分割
+                   → ["c", "d"]
+
+新: List("/a/b/") → walk_to_node("/a/b/")         // 一次搜索（同上）
+                  → 无视 hasValue，直接读 keys[0..count]
+                  → ["c", "d"]
+```
+
+**目录不需要 `hasValue=true`。** 节点有 children 就足够表示它是个目录。只有两种节点需要 `hasValue`：
+
+| 节点类型 | hasValue | value 内容 |
+|---------|----------|-----------|
+| 普通文件 | true | TLV 编码的文件值 |
+| LinkIndex | true | TLV("linkindex", target_path) |
+| ExtIndex | true | TLV("extindex", extpath + 自成员) |
+| **普通目录** | **false（不需要）** | **children 就是它的内容** |
+
+### 7.3 树形与路径的自然映射
+
+```
+路径 /a/b/c 在树中:
+  node{partial="/a/"}              → 对应路径前缀 "/a/"
+    └─ edge 'b' → node{partial="/b/"}  → 对应 "/a/b/"
+                   └─ edge 'c' → leaf  → 对应 "/a/b/c" (文件)
+
+List("/a/b/") = node的keys[] = ["c", "d"]
+List("/a/")   = node的keys[] = ["b", "e"]
+```
+
+**edge key 是单字节（'b', 'c', 'e'），partial 是 `/` 分隔的多字节路径段。** 这是 ART 的标准行为——不需要任何针对 `/` 的特殊处理。
+
+### 7.4 文件 vs 目录的区分
+
+```
+/a/b    → 文件: tree 中存在 leaf at "/a/b"，hasValue=true
+/a/b/   → 目录: tree 中存在 node at "/a/b/"，有 children，hasValue=false
+/a/b/   → 同时也可能是 LinkIndex 目录: hasValue=true, kind="linkindex"
+```
+
+`/a/b`（文件）和 `/a/b/`（目录）在 ART 树中是**不同 key**。`/a/b` 的最后一个字节是 `'b'`，`/a/b/` 的最后一个字节是 `'/'`。ART 的 `prefix_mismatch` 会在 `'b' vs '/'` 处自然分裂。
+
+### 7.5 总结：四层简化
+
+| | 当前 kvspace-go/art | 优化后 kvspace-c |
+|---|---|---|
+| 目录插入 | `art_insert("/a/", TLV_index)` | **不需要** — 插入子文件时树自动创建 |
+| 目录 value | 存 TLV("index", "c\nd") 在 bump zone | **不存** — node.keys[] 就是 children |
+| List 实现 | `decodeTLV → split("\n")` | `return node.keys[0..count]` |
+| 目录的 hasValue | true（存了 index TLV） | false（LinkIndex/ExtIndex 除外） |
+
+**每个目录省一次 bump_alloc + TLV 编解码。`List()` 从 O(k+decode) 变 O(1)。**
+
+---
+
+## 八、三个实现的代码质量与移植性
 
 | | armon/libart | kvspace-go/art | memkv |
 |---|---|---|---|
