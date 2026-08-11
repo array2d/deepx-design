@@ -17,6 +17,51 @@ layoutrwir 在五语言中的对标：
 
 五种语言都在生成线性序列。kvlang 的 layoutrwir 不是序列化——是**空间布局**：每条指令展开为一组 `[s0,s1]` 坐标，读参负轴、写参正轴、opcode 零点。产物可逐槽 `kv.Get`/`kv.List`，无需反汇编器。
 
+### 指针传址方案（φ1）
+
+函数定义利用 slot 坐标 row 0，指令从 row 1 开始。参数名通过命名 Ptr key 映射到 slot 坐标，运行时走 3 跳 Ptr 链解析。
+
+**Layout（`/lib/` 下，只读）：**
+
+```
+/lib/main.add/[0,0]   → Rwfunc(nr=2, nw=1, al=2)   ← 函数签名（仅计数）
+/lib/main.add/a       → Ptr(string, "[0,-1]", 1)    ← 命名参数→slot
+/lib/main.add/b       → Ptr(string, "[0,-2]", 1)
+/lib/main.add/c       → Ptr(string, "[0,1]", 1)     ← 命名返回值→slot
+/lib/main.add/[1,0]   → "+"                          ← 指令0（idx+1）
+/lib/main.add/[1,-1]  → Rwir("a")                    ← 指令0 read slot
+/lib/main.add/[1,-2]  → Rwir("b")
+/lib/main.add/[1,1]   → Rwir("c")
+/lib/main.add/[2,0]   → "return"                     ← 指令1
+```
+
+**Runtime（`/vthread/.../` 帧根，extindex → `/lib/main.add/`）：**
+
+```
+frameRoot/a          → ext→ Ptr("[0,-1]")              ← layout 写入，只读
+frameRoot/b          → ext→ Ptr("[0,-2]")              ← 只读
+frameRoot/c          → ext→ Ptr("[0,1]")               ← 只读
+frameRoot/[0,-1]     → Char("/vthread/1/_lit0")        ← runtime 写入，无 ext 冲突
+frameRoot/[0,-2]     → Char("/vthread/1/x")            ← runtime 写入
+frameRoot/[0,1]      → Char("/vthread/1/result")       ← runtime 写入
+frameRoot/[1,0]      → ext→ "+"                        ← 指令
+```
+
+**Resolve（3 跳 Ptr 链）：**
+
+```
+指令 [1,-1]=Rwir("a"):
+  1. GetOne(frameRoot+"/a") → ext→ Ptr("[0,-1]")      ← name→slot
+  2. GetOne(frameRoot+"/[0,-1]") → Char(path)          ← slot→arg地址
+  3. GetOne(path) → value                               ← 解引用
+```
+
+**XValueHead IsPtr**：TLV 头部第一字节 bit7 = isptr。isptr=1 时 raw body 为目标 key 路径，Kind 为目标类型。
+
+```
+TLV: [1B: b7=isptr | b6-0=kind_len][N B kind][4B al LE][4B raw_len LE][M B raw]
+```
+
 ### ExtIndex：帧根指向指令树
 
 函数调用时，不是把指令字节码拷贝到新帧——而是通过 **ExtIndex** 让帧根成为指向 `/lib/` 指令树的扩展索引：
@@ -24,17 +69,25 @@ layoutrwir 在五语言中的对标：
 ```
 编译期（WriteFunc）：
   AST → KV 结构化写入 /lib/main.add/:
-    /lib/main.add/[0,0] = "+"      /lib/main.add/[0,-1] = "A"
-    /lib/main.add/[0,-2] = "B"     /lib/main.add/[0,1] = "C"
-    /lib/main.add/[1,0] = "return"
-    /lib/main.add                 = "rwfunc add(A:int,B:int)->(C:int)"  (签名)
+    /lib/main.add/[0,0]       = Rwfunc(r2/w1)       ← 函数签名
+    /lib/main.add/a           = Ptr("[0,-1]")        ← 命名参数→slot
+    /lib/main.add/b           = Ptr("[0,-2]")
+    /lib/main.add/c           = Ptr("[0,1]")         ← 命名返回值→slot
+    /lib/main.add/[1,0]       = "+"                  ← 指令0
+    /lib/main.add/[1,-1]      = Rwir("a")
+    /lib/main.add/[1,-2]      = Rwir("b")
+    /lib/main.add/[1,1]       = Rwir("c")
+    /lib/main.add/[2,0]       = "return"             ← 指令1
 
-调用时：
-  kv.ExtIndex(frameRoot+"/", "/lib/main.add/")  # 帧根本身 → /lib/ 指令树
+调用时（HandleCall）：
+  kv.ExtIndex(frameRoot+"/", "/lib/main.add/")       ← 帧根→/lib/ 指令树
+  kv.Set(frameRoot+"/[0,-1]", Char(argAddr))         ← runtime arg 槽，无 ext 冲突
+  kv.Set(frameRoot+"/[0,-2]", Char(argAddr))
+  kv.Set(frameRoot+"/[0,1]", Char(resultAddr))
   # 所有帧共享 /lib/ 下同一份指令树，零拷贝
 ```
 
-HandleCall/HandleReturn 执行机制见 parser篇-06。
+**关键设计**：`[0,-j]` key 在 `/lib/` 下不存在（只有 named key `a`/`b`/`c`），因此 runtime 写入 `frameRoot/[0,-j]` 不会触发 extindex 写保护。HandleCall 写入 `[0,-1]` 时该 key 不发生 ext fallback → 纯本地写入。
 
 ### 与传统 VM 的关键差异
 
@@ -42,8 +95,9 @@ HandleCall/HandleReturn 执行机制见 parser篇-06。
 |--|---------|--------|
 | 代码传递 | copy 字节码到新栈帧 | **ExtIndex**（所有帧共享 /lib/ 下同一份指令树） |
 | 帧模型 | 一种帧（call/return） | **两种帧**：rwfunc（函数调用）+ scope（goto/br，详见控制流篇） |
-| 崩溃恢复 | 栈帧在内存，进程死即全失 | PC=路径字符串、`frameRoot=返回点落 KV——重启续跑 |
+| 崩溃恢复 | 栈帧在内存，进程死即全失 | PC=路径字符串、frameRoot=返回点落 KV——重启续跑 |
 | 可观测 | 需调试器 attach | `kvspace tree /vthread/…` 看 extindex 指向、frameRoot 在哪，局部变量直读帧根 |
+| 参数模型 | 寄存器/栈槽传值 | Ptr 链：name→slot→arg→value（3 跳，可优化为 name→slotIdx 内存 map） |
 
 **`=` 操作码是值拷贝，不是函数调用**：`a -> b` 编码为 `[s0,0]="="`（值拷贝），
 函数调用是 `call(name, args…) → writes`——opcode 位是 `call`，ExtIndex 发生在 HandleCall 内部。

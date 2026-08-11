@@ -220,15 +220,43 @@ func LibFunc(pkg, name string) string {
 
 ## 查找失败
 
-若 `funcKey` 对应的 XValue 为 None（签名未注册），HandleCall 返回：
+若 `funcKey` 对应的 `[0,0]` XValue 为 None（函数未注册），HandleCall 返回：
 
 ```
-NameError: func signature not found: <funcName>
+NameError: func not found: <funcName>
 ```
 
 线程进入 error 终态。
 
 ---
+
+## 阶段 5：Resolve（Ptr 链变量解析）
+
+**文件** `rwir/builtin/resolve.go`。
+
+调用后指令执行时，读槽引用走 Ptr 链解析（3 跳）：
+
+```
+resolveReadValue(kv, framePath, param):
+  1. literal? → return param.Val
+  2. absolute path? → GetOne(kv, "/abs/path")
+  3. funcFrameRoot → Find nearest .lib marker
+  4. GetOne(rwRoot+"/"+name) → ext→ Ptr("[0,-j]")?     ← name→slot
+     yes: GetOne(rwRoot+"/[0,-j]") → Char(path)       ← slot→arg addr
+          GetOne(path) → value                         ← arg addr→value
+  5. fallback: GetOne(rwRoot+"/"+name) → local var
+
+resolveWriteSlot(kv, framePath, name):
+  1. absolute path? → return name
+  2. funcFrameRoot
+  3. GetOne(rwRoot+"/"+name) → ext→ Ptr("[0,+j]")?     ← name→slot
+     yes: return PtrTarget → "[0,+j]" → kv reads arg addr
+  4. fallback: rwRoot+"/"+name → local var path
+```
+
+**优化**：函数入口时 List 一次 named key → build `name→slotIdx` 内存 map，降为 2 跳。
+
+**不再使用**：`‥rparam/‥wparam` 重定向表（替换为 Ptr 链）。
 
 ## 相关文件
 
@@ -236,8 +264,12 @@ NameError: func signature not found: <funcName>
 |------|------|
 | `parser/scanner.go:331-384` | `/` 和 `.` 的 tokenization 规则 |
 | `parser/inst.go:288-326` | 解析三种调用形态为 AST Expr |
-| `layoutrwir/layoutrwir.go:44-58` | 裸名补齐 pkg 前缀 |
+| `layout/layout.go:44-58` | 裸名补齐 pkg 前缀 |
 | `kvcpu/execute.go:156-163` | 用户函数分发 → CALL |
-| `layoutrwir/layoutrwir.go:87-182` | HandleCall：函数名解析 + 帧创建 |
+| `layout/layout.go:131-225` | HandleCall：函数名解析 + Ptr 链 arg 写入 |
+| `rwir/builtin/resolve.go` | resolveReadValue：Ptr 链变量解析 |
+| `rwir/builtin/helper.go` | resolveWriteSlot：Ptr 链写槽解析 |
 | `keytree/entry.go:5-8` | LibFunc KV key 构造 |
-| `keytree/const.go:9` | `FuncPathSep = "."` |
+| `keytree/frame.go` | EntryPC = [1,0] |
+| `kvspace-go/xvalue_rwir.go` | Rwfunc body=[nr\|nw]（4 字节） |
+| `kvspace-go/xvalue.go` | XValueHead.IsPtr + Ptr 类型 |

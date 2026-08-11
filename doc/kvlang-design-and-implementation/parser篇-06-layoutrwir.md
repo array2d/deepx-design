@@ -35,10 +35,40 @@ rwfunc init() -> () { /lib/math.sum(3, 4) -> s; print(s) }
 
 | Kind | 示例 | 写入者 |
 |------|------|--------|
-| `rwir` | `/lib/func/[0,0] = "+"` | `writeStmt`（指令读写槽） |
-| `rwfunc` | `/lib/func` | `WriteFunc`（函数签名） |
+| `rwir` | `/lib/func/[1,0] = "+"` | `writeStmt`（指令读写槽） |
+| `rwfunc` | `/lib/func/[0,0] = r2/w1` | `WriteFunc`（函数签名，body=[nr\|nw]） |
+| `ptr`（isptr=1） | `/lib/func/a = →[0,-1]` | `WriteFunc`（命名参数→slot 映射） |
 
-帧类型判定：`funcFrameRoot` 沿帧树向上查找 `.lib` 标记 → `rwfunc` 帧；无 `.lib` → scope 帧。详见 **[控制流篇](parser&runtime-01控制流篇.md)**。
+帧类型判定：`funcFrameRoot` 沿帧树向上查找 `‥lib` 标记 → `rwfunc` 帧；无 `‥lib` → scope 帧。详见 **[控制流篇](parser&runtime-01控制流篇.md)**。
+
+## WriteFunc：函数布局
+
+```
+WriteFunc(kv, pkg, fn):
+  1. funcDir = /lib/<pkg>.<name>/
+  2. kv.Set(funcDir+"/[0,0]", Rwfunc(nr, nw, al=numInsts))     ← 函数签名
+  3. for each read param p: kv.Set(funcDir+"/p.Name", Ptr("[0,-j]", 1))
+  4. for each return param r: kv.Set(funcDir+"/r.Name", Ptr("[0,+j]", 1))
+  5. WriteBody(kv, pkg, name, body, typeMap, offset=1)          ← 指令从 [1,0] 开始
+```
+
+**EntryPC**：`root/[1,0]`（函数定义占 row 0）。
+
+## HandleCall：运行时调用
+
+```
+HandleCall(ctx, kv, pc, inst):
+  1. funcDir = /lib/<pkg>.<name>/
+  2. GetOne(funcDir+"[0,0]") → Rwfunc(nr, nw)                  ← 读计数，无字符串解析
+  3. List(funcDir) → 过滤非"["前缀 → [a, b, c, ...]             ← 命名参数列表
+  4. ExtIndex(frameRoot, funcDir)                                ← 帧→指令树
+  5. Set(.returnpc, .callpc, .lib)                               ← 系统变量
+  6. for i in 0..nr: 读 inst.Reads[i+1] 实参→写 frameRoot/[0,-(i+1)]
+  7. for i in 0..nw: 读 inst.Writes[i] 写槽→写 frameRoot/[0,(i+1)]
+  8. return EntryPC(frameRoot)                                   ← [1,0]
+```
+
+**不再使用**：`parser.ParseFuncSig`（替换为 slot 读取）、`‥rparam/‥wparam` 索引（替换为 Ptr 链）。
 
 ## 帧模型与调用栈
 
