@@ -43,6 +43,7 @@ kvlang 是**严格类型语言**。所有变量、参数、返回值在编译期
 ```go
 type XValue struct {
     kind        string // vtype name，如 "int64" "float64" "string" "bool" "bytes" "array" "dict" "rwir"
+    isptr       bool //是否是指针
     arraylength int32  // 数组元素数，单值=1，>1 表示数组
     raw         []byte // 类型化原始字节，XValue owned（构造时 copy）
 }
@@ -58,10 +59,13 @@ type XValue struct {
 | `"bool"` | `Bool(v)` | 1 字节：0=false, 1=true |
 | `"string"` | `Str(v)` | UTF-8 原始字节 |
 | `"bytes"` | `Bytes(v)` | 二进制原始字节（构造时 copy） |
-| `"dict"` | `Dict()` | 零负载类型标记——成员存为平坦键族 `base.名` |
-| `"array"` | `Array(elems)` | 定长同类型数组，raw 连续存储 |
+| `"dict"` | `DictIndex(children)` | dict 成员目录（尾 `.` 的 key），children 为字段 key；旧零负载 `Dict{}` 兼容（raw 为空） |
+| `"index"` | `Index(children)` | 通用目录索引（尾 `/` 的 key），children 为子节点 key |
+| `"extindex"` | `ExtIndex(children, extpath)` | 扩展索引，写留在上层，读回落 extpath |
 | `"rwir"` | `Rwir(v)` | 指令槽文本引用（kvlang 内部） |
-| `""` | `None()` | None 值（kind 为空字符串）；`IsNone()` 返回 true |
+| `"rwfunc"` | `Rwfunc(v, al)` | 函数定义（复合 rwir） |
+| `"None"` | `None()` | None 值；`IsNone()` 返回 true |
+| `"string"` (ptr) | `Ptr(kind="string", target)` | 软链接：Set 写入 `*kind:target`，读/写/List 透明穿透；Del 末段作用于链接本体 |
 
 **kind 铁律——禁止别名**。kvlang **不支持** kind 别名。`"int"`、`"float"` 等短名在任何代码路径中均非法——必须使用全称 `"int64"`、`"float64"` 等上表所列的精确字符串。kind 字符串是跨语言类型契约的一部分（kvspace-go → kvspace-cpp → kvregion shm → op-gpu 张量 dtype），别名会破坏所有 kind-aware 中间件的匹配逻辑。违反此规则的代码（如 `kvspace.Raw("int", ...)`）必须在 code review 中拒绝。
 
@@ -70,18 +74,19 @@ type XValue struct {
 **TLV 编码**：
 
 ```
-[1B kind_len][N B kind_name][4B arraylength LE][4B raw_len LE][M B raw_value]
+[1B kind_len][N B kind_name][1B isptr][4B arraylength LE][4B raw_len LE][M B raw_value]
 ```
 
 | 字段 | 大小 | 说明 |
 |------|------|------|
-| `kind_len` | 1B | kind_name 字节数（1~127，0 表示 None） |
+| `kind_len` | 1B | kind_name 字节数（0 表示 None） |
 | `kind_name` | N B | vtype name，`[a-zA-Z0-9_]` 字符集 |
+| `isptr` | 1B | 0=普通值，1=软链接（raw 为目标 key 路径） |
 | `arraylength` | 4B | 数组元素数，uint32 LE，默认=1（单值） |
 | `raw_len` | 4B | raw_value 字节数，uint32 LE |
-| `raw_value` | M B | 类型化原始数据 |
+| `raw_value` | M B | 类型化原始数据；isptr=1 时为目标 key 路径字符串 |
 
-`IsNone()` 编码为 nil（零字节）。`DecodeXValue` 内部 copy raw bytes（owned 语义，防止与 Redis 读缓冲区共享）。
+`IsNone()` 编码为 nil（零字节）。`DecodeXValueHead` 内部 copy raw bytes（owned 语义，防止与 Redis 读缓冲区共享）。
 
 ### 变量名即地址，有地址即有 XValue——未赋值即 None
 
