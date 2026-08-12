@@ -10,60 +10,64 @@
 
 ### 1. 核心概念
 
-+ 值key：也叫文件，普通key
-+ 索引key：也叫目录，index，包括extindex。其xvalue bytes内存储着下级目录直接子名列表，用换行符(\\n)拼接，以 Redis string SET 命令存储。不再使用 Redis Set 数据结构。
++ **文件 key**：普通值 key，例如 `/a/b` → `int64:42`
++ **目录 key**：以 `/` 结尾，value 为 Index（子名列表），例如 `/a/` → `index: ["b"]`
++ **dict 目录 key**：以 `.` 结尾，value 为 DictIndex，隔离于父 `/` 目录，例如 `/a/obj.` → `dict: ["x", "y"]`
++ 同一路径下 `/a` 和 `/a/` 可独立共存（文件与目录同名）
 
-KVSpace 是文件系统风格的 KV 存储抽象，当前是Rediscli实现。
-
-路径 `/a/b` 的值存为 Redis key `/a/b`。
-
-目录（index，包括extindex），必须以/结尾 `/a/` 存为 Redis string key，value 是 XValue bytes。
-
-link可以是目录和文件key
-
-/a 是 string key（文件值），/a/ 是 string key（目录索引），独立共存
-
-`/` 是根目录，`/` 的 string key 存顶级条目名。
+KVSpace 是文件系统风格的 KV 存储抽象。`/` 管层级，`.` 管成员。
 
 ### 2. XValue 类型系统
 
-XValue必须有kind类型，包括kindnull类型。
+TLV 编码格式：
 
-XValue 是带 kind 标签的不可变值，TLV 编码存入 Redis。
+```
+[1B kind_len][N B kind_name][1B isptr][4B arraylength LE][4B raw_len LE][M B raw]
+isptr=0 → raw 为类型化数据
+isptr=1 → raw 为目标 key 路径（软链接）
+```
 
-TLV 编码格式。实际是 [1B kind_len][N B kind_name][4B arraylength LE][4B raw_len LE][M B raw]
+**kind 继承树**：`uint8` 为基类，`ElemSize(kind)` 判定定长成员，`IsByteDerived(kind)` 判定继承。
 
-普通xvalue结构定义简单，请直接看代码
+| kind | 说明 | elemSize |
+|------|------|----------|
+| `uint8` | 基础字节 | 1B |
+| `bool`, `int8`, `stringbyte` | → uint8 | 1B |
+| `int16`, `uint16` | → uint8 | 2B |
+| `int32`, `uint32`, `float32` | → uint8 | 4B |
+| `int64`, `uint64`, `float64` | → uint8 | 8B |
+| `dict` | dict 成员目录 | — |
+| `index` | 通用目录 | — |
+| `extindex` | 扩展索引 | — |
+| `None` | 空值 | — |
 
-index类型的kind，value=换行符拼接的成员名字符串
+**Ptr（软链接）**：kind=目标类型，isptr=1，raw=目标路径。Set 写入 `*kind:target`。读/写/List 透明穿透，Del 末段作用于链接本体。
 
-KindIndex     = "index"，
-KindLinkIndex = "linkindex" // 纯链接，写穿透到目标
-KindExtIndex  = "extindex"  // 扩展索引，bytes首行为=extpath，后续行为自身成员
+### 3. Dict 成员目录（`.`）
 
-### 3. Link / ExtIndex
+`a.`（尾 `.`）是 dict 目录，等价于 `a/`（尾 `/`）之于是常规目录。dict 目录独立于父 `/` 目录：
 
-Link(target, linkpath)，link可以理解为文件系统软链接
-kind=KindLinkIndex,xvalue=存string即可"targetpath"，link来说，target和linkpath要么都是值key，要么都是目录key以/结尾。
+```
+/dir/      → index: ["obj.", "other"]
+/dir/obj.  → dict: ["x", "y"]
+/dir/obj.x → int64:42
+```
 
+`SplitDictParent` 自动检测 member access 并路由 child 到 dict 目录。`JoinPath` 对 `.` 尾缀直接拼接。
 
-ExtIndex(path, extpath)，ExtIndex可以理解为写时复制的叠加层
-    一句话代码正确理解ExtIndex：list(extindexpath)=append(extindex.value[1:],list(extindex.exttarget))
-    只能是目录,如extindex="/a/a2/",exttargetindex="/lib/funca/"，下级key(如如 "/a/a2/be")的读写访问，均跳转/lib/funca/be
-ExtIndex是index，exttargetindex也是index，key必须都以/结尾
-key不容许在2者重复！（extIndex自身存在的key，不容许出现在exttargetindex中）所以读操作覆盖二者，下级成员的写/创建/删除操作都只更新extIndex自身
-逻辑上，我们通常不对extIndex/下的只读路径（也就是exttargetindex内的成员）执行任何写操作，一旦操作，需要直接panic，警告开发者，强制修改
-kind=KindExtIndex,xvalue bytes格式：首行为 "=exttargetindex_path"，后续行为自身成员名，换行符分隔。例：`=/lib/funca/\nnode1\nnode2`
-只容许有1个exttargetindex, exttargetindex_path必须是首个。
-extindex 不容许级联,exttargetindex必须是普通index
-exttargetindex前缀符号=定义在const文件！
+### 4. ExtIndex
 
-ExtIndex是kvlang的函数调用开辟新栈的需求，中间变量需要写入ExtIndex，而指令则直接来自/lib/funca/下，而/lib是代码库函数
+ExtIndex 是写时复制叠加层。`ExtIndex("/merge/", "/base/")` 后：
+- 读 `/merge/x`：先查本地，后回落 `/base/x`
+- 写 `/merge/x`：写入本地，不影响 `/base/`
+- `List("/merge/")`：合并本地 + 扩展目标
 
+不容许级联（exttarget 本身不能是 extindex）。
 
+### 5. Arridx（数组零拷贝读写）
 
-### 4.kvspace
-kvspace是一个完全分布式的元数据存储，禁止kvspace client本地存储任何信息。
+`KVPair.Arridx` 和 `Get(..., arridx)` — arridx<0 读写全数组，arridx>=0 直接定位 raw[arridx] 位置。
+`SliceElem` / `WriteElem` 基于 elemSize 计算偏移，零拷贝。
 
 ## 第二部分：操作与索引
 

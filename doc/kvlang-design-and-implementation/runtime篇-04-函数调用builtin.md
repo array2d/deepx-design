@@ -273,3 +273,26 @@ resolveWriteSlot(kv, framePath, name):
 | `keytree/frame.go` | EntryPC = [1,0] |
 | `kvspace-go/xvalue_rwir.go` | Rwfunc body=[nr\|nw]（4 字节） |
 | `kvspace-go/xvalue.go` | XValueHead.IsPtr + Ptr 类型 |
+
+---
+
+## builtin 包清单
+
+| 包 | 路径 | 说明 |
+|----|------|------|
+| `byte` | `rwir/builtin/byte/` | 所有 byte 派生 kind 通用方法（Len, At, Set, Slice） |
+| `utf8` | `rwir/builtin/utf8/` | UTF-8 编解码（String, Bytes, Len, At, Set, Slice），仅 stringbyte |
+| `unicode` | `rwir/builtin/unicode/` | Unicode 码点操作 |
+| `random` | `rwir/builtin/random/` | crypto/rand uint64（Uint64, Int63, Intn） |
+
+### kind 继承树
+
+```
+uint8                         ← 基类，elemSize=1
+├── bool, int8, stringbyte   1B
+├── int16, uint16             2B
+├── int32, uint32, float32    4B
+└── int64, uint64, float64    8B
+```
+
+`IsByteDerived(kind)` / `ElemSize(kind)` 判定继承关系。`byte.Len(v)` 对所有派生 kind 可用，`utf8.String(v)` 仅 stringbyte 可用。
