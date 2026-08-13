@@ -1,42 +1,46 @@
 # Member Access and Data Structures（成员访问与数据结构）
 
+## 语法规则：`[]` vs `.`
 
-## `.` 运算符——kvspace 路径的标准成员访问
+| 运算符 | 目标 | kvspace 层 | desugar |
+|--------|------|-----------|---------|
+| `a[i]` | **XValue 数组下标** | `ElemSize>0` 同构数组，零拷贝 raw[i] | `at(a, i)` |
+| `a.key` | **dict 成员 key** | kind=dict，`SplitDictParent` 路由 | `at(a, "key")` |
+| `pkg.func` | **lib 函数** | `/lib/pkg.func` KV key | `at(pkg, "func")` |
+| `a.*key` | **dict 动态 key** | key 变量值作为成员名 | `at(a, key)` |
 
-`ptr.val` → `at(ptr, "val")` → `kv.Get(ptr/val)`。Pratt 循环中 `.` 作为后缀运算符，对标 C `ptr->val`、Go `ptr.val`。写侧 `42 -> ptr.val` 展开为 `set(ptr, "val", 42) -> ptr`。Scanner 将 `.` 作为 token 分隔符和独立 Dot token，`at`/`set` builtin 支持字符串字段名做 kvspace 路径拼接。
+**铁律**：
+- `[]` 只用于同构 XValue 数组，`ElemSize(kind)>0`，零拷贝读写 `raw[arridx]`
+- `.` 用于 dict 成员访问和 lib 函数限定名——二者共用 `.` 分隔符，语义统一：`base.member`
 
-### 静态字段：`h.field`
-
-```
-h.field  →  at(h, "field")    # field 是字面量字符串
-```
-
-解析时 Pratt 消费 `.` 后读到普通标识符 → 作为 `StrLit` 传给 `at`。
-
-### 动态解引用：`h.*key`
-
-```
-h.*key  →  at(h, key)         # key 是变量，取其值作为路径段名
-```
-
-解析时 Pratt 消费 `.` 后读到 `*` + 标识符 → 作为裸 `Leaf` 传给 `at`，不做字符串化。这是 kvlang 内置 hash map 的语法基础：
+### `[]` — 数组下标
 
 ```kvlang
-"/tmp" -> h           # h = 路径前缀
-2 -> key              # key = 2
-h.*key                # at("/tmp", 2) → 读 /tmp/2
+a: int64 = [1, 2, 3]
+a[0] -> v0          # v0 = 1，零拷贝读 raw[0]
+99 -> a[1]           # a = [1, 99, 3]，零拷贝写 raw[1]
 ```
 
-与传统语言的对比：
+Parser 将 `a[i]` desugar 为 `at(a, i)`，builtin `at` 检测 `ElemSize>0` → `TypedIndex` 零拷贝。
 
-| 语言 | 静态字段 | 动态字段 |
-|------|---------|---------|
-| kvlang | `h.field` | `h.*key` |
-| Python | `h["field"]` | `h[key]` |
-| Go | `h.field` | `h[key]` (map) |
-| JS | `h.field` | `h[key]` |
+### `.` — dict 成员
 
-**与 None 配合**：`at` 查不到 key 返回 None。此时用 `has` 判存在更直接。O(1) hash map，解锁数百道 LeetCode 题。
+```kvlang
+h = {x: 1, y: 2}    # 创建 dict 目录 /frame/h. → dict: ["x", "y"]
+h.x -> v             # kvspace 层：/frame/h.x → int64:1
+42 -> h.z            # 新增成员，/frame/h.z → int64:42
+```
+
+kvspace 层：`h.` 是 dict 目录（kind=dict），`h.x` 是成员 key。`SplitDictParent` 自动检测并路由 child 到 dict 目录。
+
+### `.` — lib 函数
+
+```kvlang
+math.sum(3, 4) -> s           # /lib/math.sum
+string.len(w) -> n             # /lib/string.len
+```
+
+`. ` 是统一成员访问符：`pkg.func` 和 `obj.prop` 同构——都是 `base + MemberSep + name`。
 
 详见 `doc/kvlang/design/kvspace-hash-map.md`。
 
