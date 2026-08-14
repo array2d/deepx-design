@@ -26,9 +26,9 @@ native 读写码——core（`+` / `==` / `array` …）与 lib（`sqrt` / `stri
 /sys/rwir/kvlang/random.uint64 rwir random.uint64() -> (N:uint64)
 ```
 
-## lib 数据：`/lib/<name>`
+## lib 数据：`/lib/<name>`（内置 lib 源码 layout + run init）
 
-lib 包注册的内置 key（常量等可读写数据），启动时写入 `/lib/<name>`：
+内置 lib 写成 kvlang 源码，`//go:embed` 打包进 runtime 二进制。启动时先 layout 到 `/lib/`，再 run 各 lib 的 init；init 内用**绝对路径赋值**把常量写入全局（裸名 `Pi = 3.14` 是 `/vthread` 局部变量、跑完回收）：
 
 ```
 /lib/math.Pi   float64 3.141592653589793
@@ -38,14 +38,15 @@ lib 包注册的内置 key（常量等可读写数据），启动时写入 `/lib
 
 kv 代码直接以绝对路径访问：`print(/lib/math.Pi)`。
 
-## 注册 API
+## 启动流程
 
-| API | 所在包 | 作用 | 布局 |
-|-----|-------|------|------|
-| `Register(opcode, sig, impl)` | `builtin` | 注册 native rwir | `/sys/rwir/{runtime}/<opcode>` |
-| `RegisterLibData(name, val)` | `lib` | 注册 lib 内置 key（常量） | `/lib/<name>` |
-| `WriteSysRwir(kv, runtime)` | `builtin` | 启动时写 rwir 签名 | `/sys/rwir/{runtime}/` |
-| `WriteLibData(kv)` | `lib` | 启动时写 lib 数据 | `/lib/` |
+| 步骤 | 内容 |
+|------|------|
+| 布局 rwir | `WriteSysRwir(kv, runtime)` → `/sys/rwir/{runtime}/<opcode>` |
+| layout 内置 lib | 解析 `stdlib/*.kv` → `WriteFunc` → `/lib/<pkg>.init/` |
+| run 各 lib init | 每个 init 独立 vthread 执行，完成后回收 `/vthread/<vtid>/`，vtid 永远递增 |
+
+原生 rwir 由 `builtin.Register(opcode, sig, impl)` 注册；内置 lib 常量不用 Go 注册表，而是 kvlang 源码 + 启动 layout+run。
 
 ## 示例
 
@@ -59,13 +60,13 @@ func init() {
 }
 ```
 
-lib 常量（可读写数据）注册在 `lib/math/math.go`：
+内置 lib 常量写在 `stdlib/math.kv`（kvlang 源码，lib body 即隐式 `init()`）：
 
-```go
-func init() {
-	lib.RegisterLibData("math.Pi",  kvspace.NewFloat64(math.Pi))
-	lib.RegisterLibData("math.E",   kvspace.NewFloat64(math.E))
-	lib.RegisterLibData("math.Tau", kvspace.NewFloat64(2*math.Pi))
+```kv
+lib math {
+    /lib/math.Pi = 3.141592653589793
+    /lib/math.E = 2.718281828459045
+    /lib/math.Tau = 6.283185307179586
 }
 ```
 
@@ -74,8 +75,11 @@ func init() {
 | 文件 | 职责 |
 |------|------|
 | `rwir/builtin/rwirs.go` | `rwirregistry` + `Register` + `WriteSysRwir` |
-| `lib/lib.go` | `libdata` + `RegisterLibData` + `WriteLibData` |
-| `keytree/sys.go` | `SysRwirRuntime(runtime, opcode)` = `/sys/rwir/{runtime}/{opcode}` |
-| `cmd/kvlang/run.go` | 启动时 `WriteSysRwir(kv, filepath.Base(os.Args[0]))` + `lib.WriteLibData(kv)` |
 | `rwir/builtin/math.go` | math rwir ops（abs/pow/min/max/sqrt/exp/log/neg/sign） |
-| `lib/math/math.go` | math 常量（`math.Pi` / `math.E` / `math.Tau`） |
+| `keytree/sys.go` | `SysRwirRuntime(runtime, opcode)` = `/sys/rwir/{runtime}/{opcode}` |
+| `stdlib/math.kv` | 内置 lib 常量源码（`lib math { /lib/math.Pi = ... }`） |
+| `stdlib/embed.go` | `//go:embed *.kv` 打包进 runtime 二进制 |
+| `cmd/kvlang/stdlib.go` | 启动时 layout + run 各 lib init（回收 vthread，vtid 递增） |
+| `cmd/kvlang/run.go` | `WriteSysRwir(kv, filepath.Base(os.Args[0]))` |
+| `parser/parser.go` | lib body 隐式封装为 `init()` |
+| `parser/inst.go` | 绝对路径写槽（`/lib/math.Pi`）不按成员访问反糖 |
