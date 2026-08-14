@@ -8,7 +8,7 @@ kvspace 的树形 key 与 XValue 的 kindexp 共用一套分隔符语义，每�
 |--------|------|--------|-----------|
 | `/` | 层级 | `/lib/f/`、`/vthread/1/` | — |
 | `.` | 成员 | `obj.x`、`lib.func` | — |
-| `[]` | 连续/同构（可 compact，定长） | `arr[3]` 连续元素访问（虚拟 offset） | `[10]int32`、`[256,256]uint8` |
+| `[]` | 连续/同构（可 compact，定长） | — | `[10]int32`、`[256,256]uint8` |
 | `<>` | 分离/变长（key 寻址） | `arr<3>` 分离元素访问、`<s0,s1>` rwir 槽 | `<10>int32`、`<>int32` |
 | `@` | 扩展存储句柄 | — | `@[256,256]uint8` |
 
@@ -31,27 +31,26 @@ kvspace 的树形 key 与 XValue 的 kindexp 共用一套分隔符语义，每�
 
 （迁移：现有 `layout.go` / `keytree/frame.go` / `rwir.go` / `vthread.go` 的 `[%d,%d]` 格式串，及各篇文档的 `[s0,s1]`，需统一改为 `<s0,s1>`。）
 
-## kvspace-go 的索引目录符号：`[` 与 `<`
+## kvspace-go 的索引目录符号：`<` 与 `,`
 
-kvspace-go 路径系统现有 `/`（层级目录）与 `.`（成员目录）两个索引目录符号。新增 `[` 和 `<` 作为**数组索引符号**，与 `/` `.` 同级，由后端原生解析，加速数组元素访问。
+kvspace-go 路径系统现有 `/`（层级目录）与 `.`（成员目录）两个索引目录符号。新增 `<`（分离数组索引）与 `,`（多维下标分隔）作为**数组索引符号**，与 `/` `.` 同级，由后端原生解析。`[]` 不是索引符号——连续数组打包在一个 body，无 key 族。
 
 | 符号 | 位置 | 语义 | 后端处理 |
 |------|------|------|---------|
 | `/` | 后缀 | 层级目录 | `Index`(children) 路由 |
 | `.` | 后缀 | 成员目录 | `DictIndex`(children) 路由 |
-| `[` `]` | 后缀访问 | 连续数组索引 | 整读 body + offset 算术（虚拟，无独立 key） |
 | `<` `>` | 后缀访问 | 分离数组索引 | 路由到元素 key（每个元素一个整 XValue） |
+| `,` | 中缀 | 多维下标分隔 | `<i,j>` 内分隔各维下标 |
 
-- `arr[3]` = 连续数组 `[N]T` 第 3 元素：后端整读 `arr` 的 body，`offset = 3 × ElemSize` 零拷贝切片。切片是整读后的内存内操作，不违反整存整取。
 - `arr<3>` = 分离数组 `<N>T` 第 3 元素：后端定位真实 key `arr<3>`。
-- 多维：`arr[2,3]` 按 row-major 展开 offset；`arr<2,3>` 路由到 `arr<2,3>` key。
+- 多维：`arr<2,3>` 路由到 `arr<2,3>` key（`,` 分隔各维下标）。
 
-**加速来源**：`arridx` 参数折叠进路径语法——`Get("/a/", ["[3]"])` 取代 `Get("/a/", ["a"], false, 3)`。后端在 `SplitArrayParent` 一步解析 `(base, index)`，连续数组直接算 offset、分离数组直接定位 key，语言层不再做路径拼接/解析。
+**加速来源**：分离数组元素访问 `arr<i>` 由后端原生解析——`SplitArrayParent` 一步拆出 `(base, index)` 并定位 key，语言层不再做路径拼接/解析。
 
 **后端改动**：
-- 新增 `SplitArrayParent`（对标 `SplitDictParent`）：检测 `arr[i]`/`arr<i>`，拆成 (arrayBase, index)。
-- `isDir`/`parentName`/`validateIndexChild` 识别 `[` `]` `<` `>` `,`。
-- 连续数组 `List` 返回 dims（shape）；分离数组 `List` 返回元素 key 列表。
+- 新增 `SplitArrayParent`（对标 `SplitDictParent`）：检测 `arr<i>` / `arr<i,j>`，拆成 (arrayBase, index)。
+- `validateIndexChild` 已允许 `<` `>` `,`（字面量）；`isDir`/`parentName` 无需改动。
+- 分离数组 `List` 返回元素 key 列表。
 
 ## kind 与 kindexp 二分
 
@@ -171,6 +170,25 @@ kindexp 把形态显式化后，XValue 的存取约束随之收紧为**整存整
 | 连续数组 | `[10]int32` | `arr[3]` 整读 body 后内存内切片 | 是（一次整读） |
 | 分离数组 | `<10>int32` | 读 `arr<i>` 这个 key 的标量 XValue | 是（每个 key 一个整 XValue） |
 | 扩展存储句柄 | `@[256,256]uint8` | 整读写句柄 XValue；data 访问走 op-plat，不进 kvspace | 是（句柄是整 XValue） |
+
+## 压缩与解压：`<>` ↔ `[]`
+
+`scatter` / `compact` 两个 builtin 在连续与分离两种形态间转换（整存整取，无部分读写）：
+
+| builtin | 方向 | 语义 |
+|---------|------|------|
+| `scatter(arr)` | `[]type -> <>type`（解压） | 连续数组 `arr`（一个 packed body）拆成 `arr<0>..arr<N-1>` 标量 key，删除 `arr` |
+| `compact(arr)` | `<>type -> []type`（压缩） | 读 `arr<0>..arr<N-1>`（顺读到缺席）打包成连续数组 `arr`，删除 item key |
+
+```
+scatter:  arr = [10,20,30]        →  arr<0>=10  arr<1>=20  arr<2>=30  （arr 删除）
+compact:  arr<0>=10 … arr<2>=30  →  arr = [10,20,30]              （item key 删除）
+```
+
+- item key 命名 `base + "<" + i + ">"`（`<>` 字面量；一等索引目录符号落地前是普通 key）。
+- 长度：`scatter` 由 `arr.ArrayLen()` 定；`compact` 由顺读 item key 到缺席定（dense 分离数组）。
+- 同构铁律：`compact` 以首个元素 kind 打包，其余元素须同 kind（`packTypedArray` 拒绝混合）。
+- 返回值：两者均将连续数组值写回首个写槽（无写槽则仅前进 PC）。
 
 ## 待定项
 
