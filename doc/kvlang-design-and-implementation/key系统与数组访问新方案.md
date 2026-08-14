@@ -56,7 +56,7 @@ kvspace-go 路径系统现有 `/`（层级目录）与 `.`（成员目录）两�
 
 | 概念 | 内容 | 例子 |
 |------|------|------|
-| **kind** | 基础类型字符串，标量/元素类型 | `uint8` `int16` `int32` `float64` `bool` `stringbyte` `dict` `index` `rwir` `rwfunc` … |
+| **kind** | 基础类型字符串，标量/元素类型 | `uint8` `int16` `int32` `float64` `bool` `charbyte` `dict` `index` `rwir` `rwfunc` … |
 | **kindexp** | 完整类型表达式，kind + 修饰符 | `int8` `*int8` `*[]int32` `*[16]uint8` `[256,256]uint8` `[10]int32` `<10>int32` `@[256,256]uint8` |
 
 **kind 是 kindexp 的叶子**：剥掉所有 `*`/`@`/`[]`/`<>` 修饰符即得 kind。kind 仍用于 dispatch / `ElemSize` / 宽容读取器等快路径匹配；kindexp 是完整自描述。
@@ -77,7 +77,7 @@ kindexp ::= kind                   # 标量
          |  '<' dims '>' kindexp   # 定长分离数组（元素分散 N 个 key）
 dims    ::= INT (',' INT)*         # 维度列表，如 16 或 256,256
 kind    ::= uint8 | int8 | int16 | uint16 | int32 | uint32 | int64 | uint64
-         |  float32 | float64 | bool | stringbyte | time | duration
+         |  float32 | float64 | bool | charbyte | time | duration
          |  dict | index | extindex | rwir | rwfunc | scope
 ```
 

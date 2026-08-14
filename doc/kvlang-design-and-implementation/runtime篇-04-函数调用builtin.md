@@ -281,7 +281,7 @@ resolveWriteSlot(kv, framePath, name):
 | 包 | 路径 | 说明 |
 |----|------|------|
 | `byte` | `rwir/builtin/byte/` | 所有 byte 派生 kind 通用方法（Len, At, Set, Slice） |
-| `utf8` | `rwir/builtin/utf8/` | UTF-8 编解码（String, Bytes, Len, At, Set, Slice），仅 stringbyte |
+| `utf8` | `rwir/builtin/utf8/` | UTF-8 编解码（String, Bytes, Len, At, Set, Slice），仅 charbyte |
 | `unicode` | `rwir/builtin/unicode/` | Unicode 码点操作 |
 | `random` | `rwir/builtin/random/` | crypto/rand uint64（Uint64, Int63, Intn） |
 
@@ -289,10 +289,10 @@ resolveWriteSlot(kv, framePath, name):
 
 ```
 uint8                         ← 基类，elemSize=1
-├── bool, int8, stringbyte   1B
+├── bool, int8, charbyte   1B
 ├── int16, uint16             2B
 ├── int32, uint32, float32    4B
 └── int64, uint64, float64    8B
 ```
 
-`IsByteDerived(kind)` / `ElemSize(kind)` 判定继承关系。`byte.Len(v)` 对所有派生 kind 可用，`utf8.String(v)` 仅 stringbyte 可用。
+`IsByteDerived(kind)` / `ElemSize(kind)` 判定继承关系。`byte.Len(v)` 对所有派生 kind 可用，`utf8.String(v)` 仅 charbyte 可用。
