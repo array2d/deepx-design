@@ -34,7 +34,7 @@ kvlang 中所有代码组织为四个层级，从宏观到微观，每层在 kvs
 - **lib** 可嵌套子 lib（`lib a { lib b { } }`），叶子 lib 包含 rwfunc。不可直接含 rwir 或 scope。对应 `/lib/<name>/` 路径，嵌套时路径级联 `/lib/a/b/`。
 - **rwfunc** 只包含 rwir 和 scope——不可含其他 rwfunc。函数调用不嵌入 body，走 `call`/`return` 跨帧机制。rwfunc 对应 `/lib/<pkg>/<name>/`，运行时实例化为 `/vthread/<vtid>/[N,0]/` 帧。
 - **scope** 只包含 rwir 和子 scope。语义同 rwfunc 但无独立调用栈——scope 的变量和指令序列平铺在所属 rwfunc 帧内。scope 由 lower 阶段从 if/while/for 产生，不可手写。
-- **rwir** 是最小执行单元，不可再分。解释器（builtin `Call()`）或后端引擎（`dispatch.Compute`）原子执行。rwir 声明存于 `/sys/rwir/<opcode>`，运行时签名可供 agent 自省。
+- **rwir** 是最小执行单元，不可再分。解释器（builtin `Call()`）或后端引擎（`dispatch.Compute`）原子执行。rwir 是**空函数体**（仅签名，无指令体），声明存于 `/sys/rwir/{runtime}/<opcode>`，`{runtime}` 反射自可执行文件名（如 `kvlang`），运行时签名可供 agent 自省。
 
 ## 与 KV 树的映射
 
@@ -45,4 +45,4 @@ kvlang 中所有代码组织为四个层级，从宏观到微观，每层在 kvs
 | lib | — | `/lib/<pkg>/` | — |
 | rwfunc | `rwfunc` | `/lib/<pkg>/<name>/` | `/vthread/<vtid>/[N,0]/` |
 | scope | `scope` | `/lib/<pkg>/<name>/_while_N/` | `/vthread/<vtid>/[N,0]/_while_N/` |
-| rwir | `rwir` | `/sys/rwir/<opcode>` | — |
+| rwir | `rwir` | `/sys/rwir/{runtime}/<opcode>` | — |
