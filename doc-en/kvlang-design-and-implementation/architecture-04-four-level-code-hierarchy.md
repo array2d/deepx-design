@@ -34,7 +34,7 @@ All code in kvlang is organized into four levels, from macro to micro. Each leve
 - **lib** can nest sub-libs (`lib a { lib b { } }`); leaf libs contain rwfuncs. A lib cannot directly contain rwir or scope. It corresponds to the `/lib/<name>/` path; when nested, the path cascades as `/lib/a/b/`.
 - **rwfunc** contains only rwir and scope — it cannot contain other rwfuncs. Function calls are not embedded in the body; they go through the `call`/`return` cross-frame mechanism. A rwfunc corresponds to `/lib/<pkg>/<name>/`, and at runtime is instantiated as a `/vthread/<vtid>/[N,0]/` frame.
 - **scope** contains only rwir and sub-scopes. Semantically identical to a rwfunc but without its own call stack — a scope's variables and instruction sequence are laid out flat inside the owning rwfunc's frame. Scopes are produced by the lower phase from if/while/for and cannot be hand-written.
-- **rwir** is the smallest execution unit and cannot be subdivided. It is executed atomically by the interpreter (builtin `Call()`) or a backend engine (`dispatch.Compute`). A rwir declaration is stored at `/sys/rwir/<opcode>`, and its runtime signature is available for agent introspection.
+- **rwir** is the smallest execution unit and cannot be subdivided. It is executed atomically by the interpreter (builtin `Call()`) or a backend engine (`dispatch.Compute`). A rwir declaration is stored at `/rwir/<opcode>`, and its runtime signature is available for agent introspection.
 
 ## Mapping to the KV Tree
 
@@ -45,7 +45,7 @@ Each level has a corresponding path in the kvspace tree; `kvspace tree` is compl
 | lib | — | `/lib/<pkg>/` | — |
 | rwfunc | `rwfunc` | `/lib/<pkg>/<name>/` | `/vthread/<vtid>/[N,0]/` |
 | scope | `scope` | `/lib/<pkg>/<name>/_while_N/` | `/vthread/<vtid>/[N,0]/_while_N/` |
-| rwir | `rwir` | `/sys/rwir/<opcode>` | — |
+| rwir | `rwir` | `/rwir/<opcode>` | — |
 
 ## Implementation Consistency Notes
 
@@ -64,7 +64,7 @@ The claims above were cross-checked against the Go implementation under `/home/p
 
 4. **KV Kind for scope is aspirational.** `KindScope = "scope"` is defined in `kvspace-go/const.go` but is not used anywhere in the kvlang codebase. The only code that would register a block signature, `layout.RegisterBlocks`, writes kind `rwfunc` (`kvspace.NewRwfunc(0,0,0,"")`), and `RegisterBlocks` is itself never called from `cmd/kvlang`. Runtime scope frames are created without an extindex, so their kind is not observable as `scope` in the KV tree.
 
-5. **`/sys/rwir/<opcode>` holds only builtin native op signatures, and user `rwir` declarations are never persisted.** `rwir/builtin/ops.go` `WriteSysRwir` writes every registered native op signature to `/sys/rwir/<opcode>` (confirmed; invoked in `cmd/kvlang/run.go` `executeEntry`). However, user-declared `rwir name(...) -> (...)` declarations are parsed (`parser.parseRwirDecl` → `ast.File.RwirDecls`) but `layout.WriteRwir`, which would store them at `/lib/<pkg>.<name>` with kind `rwir`, is never called — so user rwir declarations do not appear in `/sys/rwir/` or anywhere else in the KV tree.
+5. **`/rwir/<opcode>` holds only builtin native op signatures, and user `rwir` declarations are never persisted.** `rwir/builtin/ops.go` `WriteRwir` writes every registered native op signature to `/rwir/<opcode>` (confirmed; invoked in `cmd/kvlang/run.go` `executeEntry`). However, user-declared `rwir name(...) -> (...)` declarations are parsed (`parser.parseRwirDecl` → `ast.File.RwirDecls`) but `layout.WriteRwir`, which would store them at `/lib/<pkg>.<name>` with kind `rwir`, is never called — so user rwir declarations do not appear in `/rwir/` or anywhere else in the KV tree.
 
 6. **lib can contain rwir declarations.** The doc says lib "cannot directly contain rwir or scope". `parser.parseLibBody` actually accepts `rwir` declarations (and plain statements) inside a lib block, appending them to `f.RwirDecls` / `f.InitBody`. The constraint holds only for rwir *instruction* slots, not rwir *declarations*.
 

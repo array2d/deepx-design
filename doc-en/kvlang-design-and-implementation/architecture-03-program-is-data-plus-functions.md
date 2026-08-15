@@ -24,7 +24,7 @@ The following claims in this document were cross-checked against the Go implemen
 
 5. **Link-list representation is confirmed.** Tutorial examples such as `tutorial/07-leetcode/206_reverse_linked_list.kv` build nodes with `/n0 = { val=1; next="/n1" }` and read `.val`/`.next`; a path string stored in a variable acts as a pointer, and member access on it dereferences to the pointed-to key.
 
-6. **The four kvspace domains are confirmed.** `keytree/const.go` defines the path segments `lib`, `vthread`, `sys`, `dev`; `keytree/entry.go` (`LibRoot`, `LibFunc`, `LibSrc`) covers `/lib/`, `keytree/vthread.go` (`VthreadRoot`) covers `/vthread/`, `keytree/sys.go` (`SysRoot`, `/sys/op/…`, `/sys/rwir/…`) covers `/sys/`, and `keytree/dev.go` (`DevTTY` → `/dev/tty/<name>/<stream>`) covers `/dev/`.
+6. **The four kvspace domains are confirmed.** `keytree/const.go` defines the path segments `lib`, `vthread`, `sys`, `dev`; `keytree/entry.go` (`LibRoot`, `LibFunc`, `LibSrc`) covers `/lib/`, `keytree/vthread.go` (`VthreadRoot`) covers `/vthread/`, `keytree/sys.go` (`SysRoot`, `/sys/op/…`, `/rwir/…`) covers `/sys/`, and `keytree/dev.go` (`DevTTY` → `/dev/tty/<name>/<stream>`) covers `/dev/`.
 
 7. **"Same syntax as VM instructions / high-level language / compiler IR / human-readable source" is broadly consistent.** Compiled rwir instructions are stored in KV at `/lib/<pkg>.<name>/[i,j]` and decoded at runtime by `rwir.Decode` (`rwir/rwir.go`); `rwir`-keyword declarations act as IR with signatures but no bodies (`layout.WriteRwir`); source text is archived at `<func>.src` via `keytree.LibSrc` (`fix-034`); and the same readable syntax is the user-facing source. The only correction is that the function declaration keyword is `rwfunc`, not `def` (see item 1).
 

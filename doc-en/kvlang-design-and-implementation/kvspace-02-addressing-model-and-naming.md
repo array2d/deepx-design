@@ -95,5 +95,5 @@ Cross-checked against the Go implementation under `/home/peng.li24/github.com/ar
    - Named basic-block ("scope") frames: `layout.HandleScope`/`HandleScopeReturn` and flat instruction keys `/lib/<func>/<scope>[coord]` (`writeStmtScope`), with scope-chain prefixes in `Decode`.
    - Per-instruction slot cap `maxParams = 128` (`rwir/rwir.go`); `Decode` errors when exceeded rather than truncating.
    - Frame-type detection helpers `extKind`/`ExtKind` (rwfunc frame = frame carrying a `.lib` marker).
-   - Additional keytree path families not referenced here: `/sys/op/<backend>/<n>` (`keytree.SysOp`), `/sys/rwir/<op>` (`SysRwir`), `/dev/tty/<name>/<stream>` (`DevTTY`), and `.src` source copies under `/lib/` (`LibSrc`, fix-034).
+   - Additional keytree path families not referenced here: `/sys/op/<backend>/<n>` (`keytree.SysOp`), `/rwir/<op>` (`Rwir`), `/dev/tty/<name>/<stream>` (`DevTTY`), and `.src` source copies under `/lib/` (`LibSrc`, fix-034).
    - vtid allocation: `/vthread/‥seq` atomic counter (`AllocVtid`) or a nanosecond timestamp (`CreateVThread`); the doc's `7`/`tid` examples are valid decimal vtid spellings.

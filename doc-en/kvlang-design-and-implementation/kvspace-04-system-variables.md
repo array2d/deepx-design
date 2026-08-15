@@ -104,4 +104,4 @@ Cross-checked against the kvlang Go sources (keytree/{const,frame,vthread,sys,en
 
 - **Data-object keys `.shape`/`.gc`** — NOT IMPLEMENTED (as the doc labels them "planned"). No keytree constant exists for either; they remain prospective. The doc correctly marks them as planned.
 
-- **`/sys/` system domain** — CONFIRMED. keytree/sys.go defines `/sys/op/<backend>/<n>`, `/sys/op/<backend>/cmd`, `/sys/op/<backend>/func/<name>`, `/sys/rwir/<opcode>`, used by rwir/dispatch (router.go, dispatch.go) and `rwir/builtin.WriteSysRwir`; distinct from the per-object `X/.var` system variables as the doc describes.
+- **`/sys/` system domain** — CONFIRMED. keytree/sys.go defines `/sys/op/<backend>/<n>`, `/sys/op/<backend>/cmd`, `/sys/op/<backend>/func/<name>`, `/rwir/<opcode>`, used by rwir/dispatch (router.go, dispatch.go) and `rwir/builtin.WriteRwir`; distinct from the per-object `X/.var` system variables as the doc describes.
