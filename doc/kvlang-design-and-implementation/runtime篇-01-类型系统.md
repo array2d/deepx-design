@@ -42,7 +42,7 @@ kvlang 是**严格类型语言**。所有变量、参数、返回值在编译期
 
 ```go
 type XValue struct {
-    kind        string // vtype name，如 "int64" "float64" "string" "bool" "bytes" "array" "dict" "rwir"
+    kind        string // vtype name，如 "int64" "float64" "char/utf32" "bool" "array" "dict" "rwir"
     isptr       bool //是否是指针
     arraylength int32  // 数组元素数，单值=1，>1 表示数组
     raw         []byte // 类型化原始字节，XValue owned（构造时 copy）
@@ -57,15 +57,18 @@ type XValue struct {
 | `"uint8"` `"uint16"` `"uint32"` `"uint64"` | `Uint8(v)` `Uint16(v)` `Uint32(v)` `Uint64(v)` | 无符号整数 |
 | `"float32"` `"float64"` | `Float32(v)` `Float64(v)` | IEEE 754 浮点 |
 | `"bool"` | `Bool(v)` | 1 字节：0=false, 1=true |
-| `"string"` | `Str(v)` | UTF-8 原始字节 |
-| `"bytes"` | `Bytes(v)` | 二进制原始字节（构造时 copy） |
+| `"char/utf32"` | `Char32(v)` | 码点，4B×N，**默认字符串**，定宽（可索引）|
+| `"char/utf8"` | `CharByte(v)` | UTF-8 字节串，1B×N，变宽（存储/交换，禁索引）|
+| `"char/ascii"` | `CharAscii(v)` | ASCII 字节串，1B×N，定宽（可索引）|
 | `"dict"` | `DictIndex(children)` | dict 成员目录（尾 `.` 的 key），children 为字段 key；旧零负载 `Dict{}` 兼容（raw 为空） |
 | `"index"` | `Index(children)` | 通用目录索引（尾 `/` 的 key），children 为子节点 key |
 | `"extindex"` | `ExtIndex(children, extpath)` | 扩展索引，写留在上层，读回落 extpath |
 | `"rwir"` | `Rwir(v)` | 指令槽文本引用（kvlang 内部） |
 | `"rwfunc"` | `Rwfunc(v, al)` | 函数定义（复合 rwir） |
 | `"None"` | `None()` | None 值；`IsNone()` 返回 true |
-| `"string"` (ptr) | `Ptr(kind="string", target)` | 软链接：Set 写入 `*kind:target`，读/写/List 透明穿透；Del 末段作用于链接本体 |
+| `"char/utf32"` (ptr) | `Ptr(kind="char/utf32", target)` | 软链接：Set 写入 `*kind:target`，读/写/List 透明穿透；Del 末段作用于链接本体 |
+
+**字符家族（`char/<编码>`）**：`char` 前缀是「字符」行为类别，`/` 后是具体编码。定宽编码（`utf32` 4B、`ascii` 1B、未来 `utf16` 2B）支持 O(1) 码点索引（`string.char`/`slice`/`s[i]`/`len`）；变宽编码 `utf8`（1–4B/码点）**拒绝索引操作**，仅用于存储/交换。判定用前缀 `IsCharKind(kind) = strings.HasPrefix(kind, "char/")`。字符串字面量默认落 `char/utf32`，写槽类型标注 `:char/utf8`/`:char/ascii` 会反推字面量编码。
 
 **kind 铁律——禁止别名**。kvlang **不支持** kind 别名。`"int"`、`"float"` 等短名在任何代码路径中均非法——必须使用全称 `"int64"`、`"float64"` 等上表所列的精确字符串。kind 字符串是跨语言类型契约的一部分（kvspace-go → kvspace-cpp → kvregion shm → op-gpu 张量 dtype），别名会破坏所有 kind-aware 中间件的匹配逻辑。违反此规则的代码（如 `kvspace.Raw("int", ...)`）必须在 code review 中拒绝。
 
@@ -80,7 +83,7 @@ type XValue struct {
 | 字段 | 大小 | 说明 |
 |------|------|------|
 | `kind_len` | 1B | kind_name 字节数（0 表示 None） |
-| `kind_name` | N B | vtype name，`[a-zA-Z0-9_]` 字符集 |
+| `kind_name` | N B | vtype name，`[a-zA-Z0-9_/]` 字符集（`/` 仅用于 `family/format` 如 `char/utf32`）|
 | `isptr` | 1B | 0=普通值，1=软链接（raw 为目标 key 路径） |
 | `arraylength` | 4B | 数组元素数，uint32 LE，默认=1（单值） |
 | `raw_len` | 4B | raw_value 字节数，uint32 LE |
@@ -124,6 +127,20 @@ uint64(18446744073709551615)   # uint64 上界完整往返
 
 **声明精度是存储/传输类型**：`int16(-2) -> n; n -> /x` 后 `kvspace get /x` 显示 `int16:-2`——
 精度进入 TLV kind 落盘，kvspace-cpp / kvregion shm / 张量 dtype 的跨语言类型契约由此成立。
+
+### 字符编码转换：kind(x) 同创建函数
+
+字符家族的三个 kind **既是构造器也是转换器**，与数字类型算子同构——`kind(x)` 即转换函数，必须有写参（读参只读）：
+
+```kv
+s:char/utf8 = "hello"     # 变宽，禁索引
+t <- char/utf32(s)        # 转 utf32 定宽（可索引）
+u <- char/ascii(t)        # 转 ascii（拒非 ASCII 码点 U+00E9）
+```
+
+- 转换语义 = `NewChar(kind, ValueString())`：任一编码的源值取 UTF-8 表示，按目标 kind 落盘。
+- `char/ascii` 严格 7-bit：非 ASCII 码点 → `TypeError`（不做静默替换）。
+- 函数名即 kind 名（含 `/`），与数字 `int8(x)` 同一调用形态；`/` 是 family/format 分隔（MIME 式），非路径。
 
 ### 数值运算域
 
