@@ -19,22 +19,22 @@ kvlang runtime 是**中央调度 runtime**，默认执行全部 native rwir / rw
 **核心公理**：
 
 1. **rwir 自描述**：opcode + 读写参已含执行所需全部信息；扩展运行时无需帧上下文（PC 即路径）。
-2. **注册即签名**：扩展运行时只写 `/rwir/<opcode>`（kind=rwir 签名），不再有 `/sys/`。
+2. **注册即签名**：扩展运行时只写 `/lib/<opcode>`（kind=rwir 签名），不再有 `/sys/`。
 3. **批量执行**：扩展运行时从 `.todo` 拿 PC，连续执行己方 rwir 到非己方指令，把最终 PC 写回 `/vthread/<vtid>/pc`。
-4. **被动消费**：扩展运行时只监控己方 `/rwir/<opcode>/.todo<vid>`，不主动调用 kvlang。
+4. **被动消费**：扩展运行时只监控己方 `/lib/<opcode>/.todo<vid>`，不主动调用 kvlang。
 
 ## 二、注册与发现
 
 ### 签名注册
 
-扩展运行时把己方每个 opcode 的签名写到 `/rwir/<opcode>`（kind=rwir，空函数体，仅签名）：
+扩展运行时把己方每个 opcode 的签名写到 `/lib/<opcode>`（kind=rwir，空函数体，仅签名）：
 
 ```
-/rwir/json.to  → rwir(nr=1, nw=1, "rwir json.to(rootkey:charbyte) -> (dest:[]charbyte)")
-/rwir/print    → rwir(nr=1, nw=0, "rwir print(A:any, ...) -> ()")
+/lib/json.to  → rwir(nr=1, nw=1, "rwir json.to(rootkey:charbyte) -> (dest:[]charbyte)")
+/lib/print    → rwir(nr=1, nw=0, "rwir print(A:any, ...) -> ()")
 ```
 
-与 native builtin 的区分：native 签名写在 `/rwir/{runtime}/<opcode>`（`{runtime}` 反射自可执行文件名，如 `kvlang`），扩展签名写在 `/rwir/<opcode>`（无 runtime 段）。二者同 kind=rwir，路径分层。
+与 native builtin 的区分：native 签名写在 `/lib/{runtime}/<opcode>`（`{runtime}` 反射自可执行文件名，如 `kvlang`），扩展签名写在 `/lib/<opcode>`（无 runtime 段）。二者同 kind=rwir，路径分层。
 
 ### 全局标记
 
@@ -48,15 +48,15 @@ term 在**包导入时**注册全局：它与中央 runtime 同进程，`vet`/`f
 
 ### 无 Select
 
-不选后端实例：每个 opcode 的扩展运行时只监控**自己** `/rwir/<opcode>/.todo<vid>`。谁注册了该 opcode，就由谁消费它的 handoff——注册即路由。
+不选后端实例：每个 opcode 的扩展运行时只监控**自己** `/lib/<opcode>/.todo<vid>`。谁注册了该 opcode，就由谁消费它的 handoff——注册即路由。
 
 ## 三、handoff 协议
 
 ### 键布局
 
 ```
-/rwir/<opcode>/.todo<vid>  = "pc|id"   # 中央 runtime 写，扩展运行时消费
-/rwir/<opcode>/.done<vid>  = id        # 扩展运行时写，中央 runtime 等
+/lib/<opcode>/.todo<vid>  = "pc|id"   # 中央 runtime 写，扩展运行时消费
+/lib/<opcode>/.done<vid>  = id        # 扩展运行时写，中央 runtime 等
 ```
 
 ### 时序
@@ -100,7 +100,7 @@ var rt = ext.Ext{
     Ops:  []ext.Op{{Name: "json.to", Sig: "...", Nr: 1, Nw: 1}, ...},
     Exec: exec,
 }
-func Register(kv kvspace.KVSpace) { rt.Register(kv) }  // 写 /rwir/<opcode> 签名 + 全局标记
+func Register(kv kvspace.KVSpace) { rt.Register(kv) }  // 写 /lib/<opcode> 签名 + 全局标记
 func Serve(kv kvspace.KVSpace)    { rt.Serve(kv) }     // 常驻：注册 + 监控 .todo + 批量 + 交还 PC
 
 func exec(_ context.Context, kv kvspace.KVSpace, pc string, inst *rwir.Rwir) {
@@ -114,7 +114,7 @@ func exec(_ context.Context, kv kvspace.KVSpace, pc string, inst *rwir.Rwir) {
 |------|------|
 | `ext.Op` | 一个 rwir：Name（opcode）+ Sig（签名）+ Nr/Nw（读写参数量） |
 | `ext.Ext` | 扩展运行时：Ops 集合 + Exec 回调 |
-| `Register` | 写 `/rwir/<opcode>` 签名 + `RegisterGlobalRwir`，幂等 |
+| `Register` | 写 `/lib/<opcode>` 签名 + `RegisterGlobalRwir`，幂等 |
 | `Serve` | 常驻循环：注册 + 监控 `.todo` + 批量执行 |
 | `RunSeq` | 从 PC 起逐条顺序执行 opcode ∈ ops 的 rwir（顺序依赖，非并行），返回下一条非己方指令 PC |
 | `WriteFinalPC` | 把最终 PC 写回 `/vthread/<vtid>/pc` |
@@ -156,11 +156,11 @@ func exec(_ context.Context, kv kvspace.KVSpace, pc string, inst *rwir.Rwir) {
 1. IsControlOp  → handleControl        （call/return/br/goto）
 2. IsNativeRwir → builtin.Native       （+/-/print/...）
 3. isCopyOp     → ExecuteCopy          （= 赋值）
-4. isUserRwir   → handoffExternalRwir  （/rwir/<opcode> kind==rwir）
+4. isUserRwir   → handoffExternalRwir  （/lib/<opcode> kind==rwir）
 5. default      → rewrite as call      （用户函数）
 ```
 
-- `isUserRwir(opcode)`：`/` 开头 → false；`/rwir/<opcode>` 存在且 kind==rwir → true。
+- `isUserRwir(opcode)`：`/` 开头 → false；`/lib/<opcode>` 存在且 kind==rwir → true。
 - `handoffExternalRwir`：写 `.todo<vid>="pc|id"`，Watch `.done<vid>==id`，不推进 PC。
 - `dispatch` 包已删除：tensor 的 `/sys/op/` 调度不再保留，统一走 rwirext。
 
@@ -168,7 +168,7 @@ func exec(_ context.Context, kv kvspace.KVSpace, pc string, inst *rwir.Rwir) {
 
 | 目录 | 回答 | 内容 |
 |------|------|------|
-| `/rwir/<opcode>` | 有什么 op（签名） | rwir 签名（读参/写参/类型） |
+| `/lib/<opcode>` | 有什么 op（签名） | rwir 签名（读参/写参/类型） |
 | `/ext/` | 在哪、怎么执行（拓扑） | 存储/计算/通信注册（[[kvspace篇-05-扩展存储拓扑]]） |
 
-无状态扩展运行时（term/json）只写 `/rwir/`；有状态扩展引擎（op-gpu/heap-plat）写 `/rwir/` + `/ext/`。handoff 协议一致，后者多一次 `/ext/` 查表定位引擎。
+无状态扩展运行时（term/json）只写 `/lib/`；有状态扩展引擎（op-gpu/heap-plat）写 `/lib/` + `/ext/`。handoff 协议一致，后者多一次 `/ext/` 查表定位引擎。
