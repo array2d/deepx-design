@@ -1,6 +1,6 @@
 # runtime篇-06: C 运行时与后端抽象
 
-> 状态：与实现同步（2026-08-17）。代码：`kvlang/runtime/`（纯 C）、`kvlang/runtime-rwirext/`（Rust term 扩展）、`array2d/kvspace/`（kvspace-c SHM）、`array2d/kvspace-durable/`（fs/redis）。
+> 状态：与实现同步（2026-08-17）。代码：`kvlang/runtime/`（纯 C）、`kvlang/runtime-rwirext/rust/term/`（Rust term）、`kvlang/runtime-rwirext/go/json/`（Go json）、`kvlang/runtime-rwirext/py/numpy/`（Python numpy，零拷贝）、`array2d/kvspace/`（kvspace-c SHM）、`array2d/kvspace-durable/`（fs/redis）。旧 Go runtime 已迁 `kvlang/oldhero/`。
 
 ## 一、小 runtime 大扩展
 
@@ -12,7 +12,7 @@ kvlang 是**小 runtime 大扩展**架构。中央 runtime 只实现最核心的
 
 `kvlang/runtime/` 是 Go runtime 的 C 顶替版，作为嵌入式通用执行器，嵌入到 rwirext 项目（op-gpu、agent、livebyte）。
 
-- **对外两组 C ABI**：`kvlang_runtime.h`（`kvlang_rt_connect/disconnect/execute/...`，核心执行器）+ `kvlang_rwext.h`（`rwext_connect/register/list/get/set/del/print_line/next_pc`，扩展 runtime 的 kv 读写 + rwir 解码 + resolve/display 封装）。
+- **对外两组 C ABI**：`kvlang_runtime.h`（`kvlang_rt_connect/disconnect/execute/...`，核心执行器）+ `kvlang_rwext.h`（`rwext_connect/register/list/get/set/del/print_line/params/next_pc`，扩展 runtime 的 kv 读写 + rwir 解码 + resolve/display 封装）。`rwext_params` 返回 opcode + 读参名 + 写参名（\n 分隔），供 numpy/tensor 扩展按路径零拷贝读 raw 数据。
 - **模块**：`xvalue.c`（XValue TLV 编解码 + value_string）、`kv.c`（kvspace ABI 封装）、`keytree.c`（路径构造）、`rwir.c`（PC 解析 + Decode）、`vthread.c`、`builtin.c`（~50 算子 + 静态注册表）、`kvcpu.c`（Execute 循环 + Bootstrap/HandleScope）、`runtime.c`（ABI 层）、`rwext.c`（扩展 ABI）。
 - **注册表**：Go 的 `map[string]nativeRwir` → C 静态数组 + 线性查找。
 - **print/println/cerr 是外部 rwir**（不在 builtin）：走 `handoff_external_rwir`（写 `/lib/<op>/.todo<vid>`，watch `/lib/<op>/.done<vid>`==id），由 `runtime-rwirext`（Rust）扩展在独立线程执行。
@@ -42,7 +42,15 @@ kvspace_tlv_encode / tlv_encode_ptr / decode_head / new_ptr / new_char / new_cha
 
 `conn(dsn)` 按 scheme 选后端（`shm://`、`redis://`、`fs://`），DSN 是唯一的后端区分。
 
-## 五、验证（Rust term 扩展 + C runtime）
+## 五、numpy 扩展（零拷贝 buffer 在 kvspace）
+
+`runtime-rwirext/py/numpy/` 是第一个 **tensor 类** rwirext（CPU 侧，numpy 计算，为 op-gpu 铺垫）。tensor 本体较大，**走 kvspace-c SHM**（redis/fs 有 I/O 拷贝，不适用）。
+
+- **零拷贝核心**（`numpy_ext.py`）：tensor 存 kvspace 为 XValue 定长数组（`float64`/`int64` 等）。`tensor_view(key)` 经 `kvsc_get` 拿 TLV 指针，解析 kindexp 头（`[1B kl][kind][1B ref][1B arr_flag][1B ndim][ndim×4B dims][4B raw_len][raw]`）定位 raw 段，用 `numpy.ctypeslib.as_array` 在该地址上建 ndarray——ndarray 的 buffer 就是 SHM 的 raw data，读写 ndarray 即读写 kvspace，无拷贝。
+- **rwir handoff**（`numpy_rwext.py`）：复用 `rwext_*` ABI（`rwext_connect/register/list/get/set/del/params/next_pc`）。注册 `numpy.add`/`numpy.mul`（nr=2, nw=1），serve 循环里 `rwext_params` 解码出读参/写参**路径**，`tensor_view` 零拷贝读、numpy 算、`tensor_alloc` 写回、交还 PC。
+- **测试**：`test_numpy.py`（直接零拷贝 view + 原地改写回 kvspace）+ `test.kv`（`numpy.add(/t/a, /t/b) -> /t/c` 经 shm 全流程）。
+
+## 六、验证（Rust term 扩展 + C runtime）
 
 `tutorial/test.py --runtime c`（Rust layout → kvspace → C runtime），140 例（136 可测 + 4 外部 wip 跳过）：
 
