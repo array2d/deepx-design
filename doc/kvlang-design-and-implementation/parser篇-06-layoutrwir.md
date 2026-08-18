@@ -20,7 +20,7 @@ import kvspace篇-03-代码指令的布局格式
 裸顶层代码自动封装为隐式 `rwfunc init() -> () { }`。
 
 ```kv
-lib math { rwfunc sum(A:int, B:int) -> (C:int) { A + B -> C } }
+lib math { rwfunc sum(A:int64, B:int64) -> (C:int64) { A + B -> C } }
 rwfunc init() -> () { /lib/math.sum(3, 4) -> s; print(s) }
 ```
 

@@ -31,7 +31,7 @@ kvlang runtime 是**中央调度 runtime**，默认执行全部 native rwir / rw
 扩展运行时把己方每个 opcode 的签名写到 `/lib/<opcode>`（kind=rwir，空函数体，仅签名）：
 
 ```
-/lib/json.to  → rwir(nr=1, nw=1, "rwir json.to(rootkey:charbyte) -> (dest:[]charbyte)")
+/lib/json.to  → rwir(nr=1, nw=1, "rwir json.to(rootkey:char/utf8) -> (dest:[]char/utf8)")
 /lib/print    → rwir(nr=1, nw=0, "rwir print(A:any, ...) -> ()")
 ```
 

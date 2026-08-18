@@ -1,5 +1,7 @@
 # rwir 与 lib 数据：注册布局
 
+> 签名参数/返回值的 `type` 用**签名类型表达式**（并集 `A|B`、通配 `any`、高维 shape `[2,3]`、动态维 `?`），BNF 见 [[runtime篇-07-签名类型表达式]] 与 `grammar.bnf`。
+
 ## 三类 KV 内容
 
 kvlang 落在 kvspace 树上的内容，按「是否有指令体」与「是否可读写」分三类，各有固定路径：
@@ -22,7 +24,7 @@ native 读写码——core（`+` / `==` / `array` …）与 lib（`sqrt` / `stri
 
 ```
 /rwir/kvlang/string.len    rwir string.len(S:string) -> (C:int64)
-/rwir/kvlang/sqrt          rwir sqrt(A:num) -> (C:float64)
+/rwir/kvlang/sqrt          rwir sqrt(A:any) -> (C:float64)
 /rwir/kvlang/random.uint64 rwir random.uint64() -> (N:uint64)
 ```
 
@@ -54,8 +56,8 @@ rwir（空函数体）注册在 `rwir/builtin/math.go`：
 
 ```go
 func init() {
-	Register("abs",  "rwir abs(A:num) -> (C:num)", mOp{kind: "abs"})
-	registerWord("sqrt", "rwir sqrt(A:num) -> (C:float64)", mOp{kind: "sqrt"})
+	Register("abs",  "rwir abs(A:any) -> (C:any)", mOp{kind: "abs"})
+	registerWord("sqrt", "rwir sqrt(A:any) -> (C:float64)", mOp{kind: "sqrt"})
 	// ...
 }
 ```

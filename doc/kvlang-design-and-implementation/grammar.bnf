@@ -45,9 +45,23 @@ rwir_decl   = "rwir" ident "(" [ param_list ] ")" [ "->" "(" [ param_list ] ")" 
               (* 声明签名，无体，解释器直执行 *)
 
 param_list  = param { "," param }
-param       = ident [ ":" ident ]      (* type annotation 可选 *)
+param       = ident [ ":" type_expr ]  (* type annotation 可选，见「类型表达式」节 *)
 
 statement   = instruction | if_stmt | while_stmt | for_stmt | block_stmt
+```
+
+## 类型表达式（签名参数/返回值类型，多态 + 高维数组）
+
+> 完整语义见 [[runtime篇-07-签名类型表达式]]。铁律：无家族简写（`int`/`uint`/`float`/`num`/`char`）——位宽是开放集合（int4/fp8/fp16…），编码须写明确（`char/utf8`、`char/utf32`）；多态靠显式 `|` 枚举；kind 只接受精确 kind 串，无 `charbyte`。
+
+```
+type_expr   = atom { "|" atom }                  (* 并集：A|B 表 A 或 B *)
+atom        = [ dims ] ( any | kind )
+dims        = "[]"                               (* 1 维、长度任意，等价 [?] *)
+            | "[" dim { "," dim } "]"            (* 逗号分割的维；rank = 项数 *)
+dim         = integer | "?"                      (* 精确大小 或 动态维 *)
+any         = "any"                              (* 通配，匹配任意 kind *)
+kind        = 精确 kind 串                        (* bool、int8..uint64、float32/64、char·、dict、index、extindex、rwir、rwfunc、scope、time、duration *)
 ```
 
 ## 指令

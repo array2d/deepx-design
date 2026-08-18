@@ -32,7 +32,7 @@ isptr=1 → raw 为目标 key 路径（软链接）
 | kind | 说明 | elemSize |
 |------|------|----------|
 | `uint8` | 基础字节 | 1B |
-| `bool`, `int8`, `charbyte` | → uint8 | 1B |
+| `bool`, `int8`, `char/utf8` | → uint8 | 1B |
 | `int16`, `uint16` | → uint8 | 2B |
 | `int32`, `uint32`, `float32` | → uint8 | 4B |
 | `int64`, `uint64`, `float64` | → uint8 | 8B |
