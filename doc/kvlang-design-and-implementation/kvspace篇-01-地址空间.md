@@ -3,16 +3,16 @@
 > 本章讲述 kvlang **使用** kvspace 的过程设计与约束，而非 kvspace 自身的设计实现。
 > kvspace 的接口定义、XValue 类型系统、存储模型等见 [kvspace 设计与实现](../kvspace-design-and-implementation/)。
 
-## 四域
+## 系统域
 
-kvspace 树形路径分四个系统域，借用 Unix 文件系统思想；**其余 `/` 路径全部自由，由用户定义**：
+kvspace 树形路径只保留两个系统域，借用 Unix 文件系统思想；**其余 `/` 路径全部自由，由用户定义**：
 
 ```
-/lib/{pkg}.{name}         编译优化后函数（签名 + 指令树）+ .src 源码副本
+/lib/{pkg}.{name}         编译优化后函数（签名 + 指令树）+ .src 源码副本；扩展 rwir 也注册于此
 /vthread/{vid}/           虚线程栈帧（运行时）
-/sys/                     系统基础设施（VM/op-plat）
-/dev/                     外部 I/O 设备（/dev/tty 终端、/dev/screen 屏幕）
 ```
+
+> 代码里只有 `LIB_ROOT="/lib"` 与 `VTHREAD_ROOT="/vthread"` 两个前缀（`runtime/src/runtime_internal.h`）。曾设想的 `/sys/`（基础设施注册表）与 `/dev/`（I/O 设备域）**已废弃**：基础设施与扩展 rwir 统一落在 `/lib/`，I/O 不再经设备域（见下"没有 /dev 设备域"）。
 
 ### `/lib/`
 
@@ -24,15 +24,11 @@ kvspace 树形路径分四个系统域，借用 Unix 文件系统思想；**其�
 
 运行时栈帧，借用 Unix `/proc/<pid>/` 思想——每 vthread 一棵子树，`.pc`/`.status` 等系统键暴露执行状态；帧根本身是 extindex 指向 `/lib/` 指令树。
 
-### `/sys/`
+### 没有 /dev 设备域
 
-基础设施注册表（VM 心跳、op 算子列表），借用 Unix `/sys/` 伪文件系统思想。
+KV 世界里没有终端、没有设备文件，只有 key 和 value。`print`/`println`/`cerr`/`input` 这类 I/O **不是**地址空间的一个域，也不是 C runtime 的 builtin rwir——它们是**扩展 rwir**：`term` 扩展运行时把签名注册到 `/lib/<opcode>`（kind=`rwir`），执行时直接写宿主进程的 `stdout`/`stderr`（Rust `print!`/`eprintln!`），不经任何 `/dev/*` 键。与 `json.to`/`json.from`、tensor 算子同一套 rwir 扩展机制（见 [runtime篇-05](runtime篇-05-rwirext扩展运行时.md)）。
 
-### `/dev/`
-
-借鉴 Unix `/dev/`——I/O 边界。`/dev/tty/`（终端输入输出）、`/dev/screen`（屏幕渲染）。外部设备挂载为 kvspace 子树，读写设备 = 读写 kvspace 键。
-
-### 四域之外
+### 两域之外
 
 `/` 路径（如 `/counter`、`/n0.val`、`/tmp/seen`）完全由用户代码定义——kvspace 不预设 schema，只提供 Write/Read/Watch 原语。
 

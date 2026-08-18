@@ -51,7 +51,7 @@ VM 运行时会为它管理的对象生成**内置变量（系统变量）**，�
 
 **内联暂停指令**：`debugger()`（fix-031，对齐 V8/TypeScript `debugger;` 语句）——源码内联暂停点；非调试模式下 no-op，调试模式下暂停 vthread 等待 agent 的 step/continue/abort。暂停/恢复协议走 `.debugger`、`.debugger.pause`、`.debugger.resume` 三个键。
 
-注意区分：`/sys/`（vm 心跳、op 注册）是独立的系统**域**（顶层树），与对象随身的 `/.var` 系统**变量**是两种机制。`/vthread/<vtid>/term`（终端绑定名）是普通结构键（非 `/.` 前缀），用户代码可读写。
+注意区分：地址空间的系统**域**（`/lib/`、`/vthread/` 顶层树，见 [kvspace篇-01](kvspace篇-01-地址空间.md)）与对象随身的 `/.var` 系统**变量**是两种机制。`/vthread/<vtid>/term`（终端绑定名）是普通结构键（非 `/.` 前缀），用户代码可读写。
 
 ### 三种键形态：一眼判型
 

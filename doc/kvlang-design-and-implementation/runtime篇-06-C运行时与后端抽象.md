@@ -15,7 +15,7 @@ kvlang 是**小 runtime 大扩展**架构。中央 runtime 只实现最核心的
 - **对外两组 C ABI**：`kvlang_runtime.h`（`kvlang_rt_connect/disconnect/execute/...`，核心执行器）+ `kvlang_rwext.h`（`rwext_connect/register/list/get/set/del/print_line/params/next_pc`，扩展 runtime 的 kv 读写 + rwir 解码 + resolve/display 封装）。`rwext_params` 返回 opcode + 读参名 + 写参名（\n 分隔），供 numpy/tensor 扩展按路径零拷贝读 raw 数据。
 - **模块**：`xvalue.c`（XValue TLV 编解码 + value_string）、`kv.c`（kvspace ABI 封装）、`keytree.c`（路径构造）、`rwir.c`（PC 解析 + Decode）、`vthread.c`、`builtin.c`（~50 算子 + 静态注册表）、`kvcpu.c`（Execute 循环 + Bootstrap/HandleScope）、`runtime.c`（ABI 层）、`rwext.c`（扩展 ABI）。
 - **注册表**：Go 的 `map[string]nativeRwir` → C 静态数组 + 线性查找。
-- **print/println/cerr 是外部 rwir**（不在 builtin）：走 `handoff_external_rwir`（写 `/lib/<op>/.todo<vid>`，watch `/lib/<op>/.done<vid>`==id），由 `runtime-rwirext`（Rust）扩展在独立线程执行。
+- **print/println/cerr 是外部 rwir**（不在 builtin，`bi_is_native` 不含），在 `/lib/<opcode>`（kind=rwir）注册，dispatch 经 `is_ext_rwir` 命中。执行分两种模式：**嵌入式**（`KVMODE_RETURN`）——`runtime-rwirext` 的 Rust `term` 与 runtime 同进程，execute 循环经 `out_pc` 把控制交回扩展、扩展直接写宿主进程 stdout/stderr，零轮询；**handoff**——`handoff_external_rwir` 写 `/lib/<op>/.todo<vid>`、watch `/lib/<op>/.done<vid>`==id（30s 超时、50ms 轮询），供独立进程扩展（Go json、Py numpy）。
 
 ## 三、kvspace 统一 C ABI（去特化）
 

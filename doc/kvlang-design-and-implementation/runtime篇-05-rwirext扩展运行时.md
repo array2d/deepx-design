@@ -127,7 +127,7 @@ func exec(_ context.Context, kv kvspace.KVSpace, pc string, inst *rwir.Rwir) {
 | op | print/println/cerr/input | json.to/json.from |
 | 进程 | 与中央 runtime 同进程（run.go 导入） | 独立进程（`rwirext/json/cmd`） |
 | opcode | 裸名（init 注册全局） | dotted（`json.to`） |
-| handler | 直接写 /dev/stdout\|stderr、读 /dev/stdin | 递归 KV↔JSON |
+| handler | 直接写宿主进程 stdout\|stderr、读 stdin（无 `/dev/*` 键） | 递归 KV↔JSON |
 
 两者结构统一为：`var rt = ext.Ext{...}` + `Register`/`Serve` 两行 + `exec` 分发 + handler。livebyte 的 agent 扩展照此模板：声明 Ops、两行转发、实现 Exec。
 
@@ -155,7 +155,7 @@ func exec(_ context.Context, kv kvspace.KVSpace, pc string, inst *rwir.Rwir) {
 
 ```
 1. IsControlOp  → handleControl        （call/return/br/goto）
-2. IsNativeRwir → builtin.Native       （+/-/print/...）
+2. IsNativeRwir → builtin.Native       （+/-/len/...；print/println/cerr 不在此，是扩展 rwir）
 3. isCopyOp     → ExecuteCopy          （= 赋值）
 4. isUserRwir   → handoffExternalRwir  （/lib/<opcode> kind==rwir）
 5. default      → rewrite as call      （用户函数）
