@@ -15,7 +15,8 @@
 ## 二、文法
 
 ```
-type   := atom ( "|" atom )*               # 并集：A|B 表 A 或 B
+type   := union ( "..." )?                 # 末参可带 "..." 变参：0..N 个同型实参
+union  := atom ( "|" atom )*               # 并集：A|B 表 A 或 B
 atom   := dims ( any | kind )
 dims   := ε                                # 无 [] = 标量（0 维）
         | "[]"                             # 空 [] = 1 维、长度任意（等价 [?]）
@@ -24,6 +25,8 @@ dim    := int | "?"                        # 精确大小 或 动态维（? = �
 any    := "any"                            # 通配，匹配任意 kind
 kind   := 精确 kind 串（bool、int8..uint64、float32/64、char·、dict、index、extindex、rwir、rwfunc、scope、time、duration）
 ```
+
+**变参 `...`**：仅**末**读参可带尾缀 `...`（如 `A:any...`、`A:int64|float64...`），表「0..N 个同型实参」——匹配器把该参数之后的全部实参逐个按去掉 `...` 的 union 判定。用于 `print`/`println`/`cerr`/`min`/`max` 等 arity 开放的 rwir。非末参带 `...` 是装载期错误。
 
 **铁律：无家族简写**。`int`/`uint`/`float`/`num` 这类「按位宽聚族」的简写**不提供**——位宽是开放集合（未来有 int4、fp8、fp16…），封闭枚举会漏、开放前缀又会收进 runtime 尚不支持的 kind。`char` 编码简写同样不提供——字符类型须写明确的编码格式（`char/utf8`、`char/utf32`、`char/ascii`）。多态靠显式 `|` 枚举：`int8|int16|int32|int64`。仅保留一个与「位宽/编码枚举」无关的简写：
 
@@ -37,7 +40,7 @@ kind   := 精确 kind 串（bool、int8..uint64、float32/64、char·、dict、i
 A:int64                      # 标量 int64
 A:int64|float64              # 标量并集（多态核心）
 A:int8|int16|int32|int64     # 任意整数（显式枚举，无数值家族）
-A:char/utf8                  # 仅 utf8 字符串
+A:char/utf8                  # 单个 utf8 字符（标量）；字符串用 []char/utf8
 
 A:[]float32                  # 1-D float32，长度任意（= [?]float32）
 A:[2]float32                 # 1-D，恰好 2 元素
@@ -48,7 +51,7 @@ A:[]float32|[]float64        # 多精度 1-D
 
 A:[2,3]float32|float32       # shape 并标量：2×3 矩阵 或 标量（丢给函数自行判断）
 A:[?,?]float64               # 2-D 浮点、两维都动态
-A:bool|char/utf8             # bool 或 utf8 字符串
+A:bool|char/utf8             # bool 或 单个 utf8 字符
 A:index|dict                 # 目录
 ```
 
@@ -62,11 +65,12 @@ A:index|dict                 # 目录
 match(E, k, n, d):
   对 E 按 "|" 拆成若干 atom，任一 atom 命中即 true
   matchAtom(atom, k, n, d):
+    atom == "any" → true（顶类型，任意 kind + 任意 shape）
     有 "[" 前缀 → 解析出 shape 与剩余 type：
-        matchShape(shape, n, d) 且 matchAtom(type, k, -1, nil)
-    无 "["      → 标量：n == 0 且（any/kind 匹配）
+        matchShape(shape, n, d) 且 base(type) 匹配 k
+    无 "["      → 单值（shape=[1]）：n == 0 且 kind 匹配 k
   matchShape(shape, n, d):
-    shape == ""        → n >= 1
+    shape == ""        → n == 1     # "[]" 等价 "[?]"：恰一维、任意长
     len(拆逗号) != n    → false
     逐维：p=="?" 跳过；否则 d[i] == int(p)
 ```
@@ -105,7 +109,7 @@ func matchAtom(atom, kind string, ndim int, dims []int32) bool {
     }
 }
 func matchShape(shape string, ndim int, dims []int32) bool {
-    if shape == "" { return ndim >= 1 }
+    if shape == "" { return ndim == 1 }   // "[]" 等价 "[?]"：恰一维、任意长
     parts := strings.Split(shape, ",")
     if len(parts) != ndim { return false }
     for i, p := range parts {
@@ -129,3 +133,19 @@ func matchShape(shape string, ndim int, dims []int32) bool {
 shape 与标量的并集（`[2,3]float32|float32`）**丢给函数自己判断**——签名只保证「实参属于声明集合」，具体语义（是矩阵还是标量）在实现侧。
 
 运行时值仍自描述（XValue 带 kind + ndim + dims），签名只是编译/装载期的类型契约，不参与运行时装箱。
+
+## 八、参数 kindexp 的落盘与运行时内联匹配
+
+**铁律**：rwir/rwfunc 每个参数落盘的 **kindexp 与源码里的类型定义表达式逐字节相同**（同一文法，含 `...`）。不再有「显示串」与「机器串」两种编码。
+
+**统一落盘于 `/lib/<opcode>`**。rwir 定义（扩展算子，无指令体）与 rwfunc（用户函数）**同一存储位置、同一定义体格式**——不再有独立的 `/rwir/{runtime}/<opcode>/` 槽位树。`<opcode>` 可带包前缀（如 `numpy.add`、`math.sqrt`）。定义体（`char/utf8` 值）布局：
+
+```
+[nr : u16 LE][nw : u16 LE][读参 kindexp × nr, 再 写参 kindexp × nw，全部以 "\n" 连接]
+```
+
+即读参在前、写参在后，各 kindexp 逐字节等于源文法（如 `int64|float64`、`[2,3]float32`、`any...`）。命名参数→帧槽指针仍在 `/lib/<opcode>/<param>`。
+
+**native op 不落盘**：其 kindexp 内联在 runtime 的 C 注册表中，是唯一权威来源，**运行时匹配直接读 C 表，不回查 kvspace、也不镜像写入**。数值多类型算子在 C 表中**融合为单条**（如 `add(a:int64|int32|…, b:…)`），派发时由实参 kind 决定输出 kind，不再按 `<numkind>.<op>` 铺开条目。**扩展 op** 经 `rwext_register(opcode, nr, nw, sig)` 注册，runtime 把 `sig` 按方括号感知切分为各参 kindexp、做 `type_expr_valid` 校验（拒绝 `path` 等非 kind），并按上述定义体格式写入 `/lib/<opcode>`。
+
+**运行时内联匹配**：execute 大循环解码指令、走到 `[n,0]` 派发前，按 opcode 从 `/lib/<opcode>` 取定义体、解出读参 kindexp，对每个已解析实参（kind/ndim/dims）跑 `type_expr_match(kindexp, …)`；变参 `...` 把尾随实参全部对末 kindexp 判定。任一失配 → `TypeError` 写 vthread 错误并停机。

@@ -45,7 +45,7 @@ rwir_decl   = "rwir" ident "(" [ param_list ] ")" [ "->" "(" [ param_list ] ")" 
               (* 声明签名，无体，解释器直执行 *)
 
 param_list  = param { "," param }
-param       = ident [ ":" type_expr ]  (* type annotation 可选，见「类型表达式」节 *)
+param       = ident [ ":" type_expr [ "..." ] ]  (* type 可选；末参可带 "..." 变参，见「类型表达式」节 *)
 
 statement   = instruction | if_stmt | while_stmt | for_stmt | block_stmt
 ```
@@ -62,6 +62,7 @@ dims        = "[]"                               (* 1 维、长度任意，等�
 dim         = integer | "?"                      (* 精确大小 或 动态维 *)
 any         = "any"                              (* 通配，匹配任意 kind *)
 kind        = 精确 kind 串                        (* bool、int8..uint64、float32/64、char·、dict、index、extindex、rwir、rwfunc、scope、time、duration *)
+variadic    = type_expr "..."                    (* 仅末参：0..N 个同型实参，每个按 type_expr 匹配 *)
 ```
 
 ## 指令

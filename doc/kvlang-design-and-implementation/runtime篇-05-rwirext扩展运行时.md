@@ -30,12 +30,14 @@ kvlang runtime 是**中央调度 runtime**，默认执行全部 native rwir / rw
 
 扩展运行时把己方每个 opcode 的签名写到 `/lib/<opcode>`（kind=rwir，空函数体，仅签名）：
 
+值体为 `[nr:u16 LE][nw:u16 LE][读参+写参 kindexp，"\n" 连接]`（详见 [[runtime篇-07-签名类型表达式]] §八）：
+
 ```
-/lib/json.to  → rwir(nr=1, nw=1, "rwir json.to(rootkey:char/utf8) -> (dest:[]char/utf8)")
-/lib/print    → rwir(nr=1, nw=0, "rwir print(A:any, ...) -> ()")
+/lib/json.to  → rwir(nr=1, nw=1, "char/utf8\n[]char/utf8")   # 读参 rootkey，写参 dest
+/lib/print    → rwir(nr=1, nw=0, "any...")                    # 变参读参 A
 ```
 
-与 native builtin 的区分：native 签名写在 `/lib/{runtime}/<opcode>`（`{runtime}` 反射自可执行文件名，如 `kvlang`），扩展签名写在 `/lib/<opcode>`（无 runtime 段）。二者同 kind=rwir，路径分层。
+与 native builtin 的区分：**native 签名不落盘**——内建在 runtime 的 C 注册表 `builtins[]`（`opcode → bi_fn`），运行时直接查表、不写 kvspace；扩展签名落 `/lib/<opcode>`（kind=rwir）。
 
 ### 全局标记
 
