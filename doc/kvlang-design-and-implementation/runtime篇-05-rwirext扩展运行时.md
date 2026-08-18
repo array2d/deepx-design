@@ -1,6 +1,6 @@
 # runtime篇-05: rwirext 扩展运行时
 
-> 状态：与实现同步。代码：`rwir/ext`（Go 框架）+ `rwirext/term`（Go term）、`runtime-rwirext/go/json`（Go json 标杆）、`runtime-rwirext/rust/term`（Rust term）。
+> 状态：与实现同步。代码：`rwir/ext`（Go 框架）+ `rwirext/term`（Go term）、`runtime-rwirext_example/go/json`（Go json 标杆）、`runtime-rwirext_example/rust/term`（Rust term）。
 > C runtime 侧的实现（Rust term 扩展 + `rwext_*` ABI）见 [[runtime篇-06-C运行时与后端抽象]]。
 
 ## 一、核心模型
