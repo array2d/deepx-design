@@ -88,6 +88,21 @@ kind    ::= uint8 | int8 | int16 | uint16 | int32 | uint32 | int64 | uint64
 - **compact**：`[N]T` 或字面量初始化 `[]T = [...]`——元素连续打包在一个 XValue，`raw_len = ∏dims × ElemSize`。对齐 C `int[10]`、Go `[10]int`、Rust `[i32;10]`。
 - **散 key**：裸声明 `[]T`（无字面量）或 `array.append`/`array.slice` 触发——元素分散在 `arr<0>..arr<N-1>` 各 key。对齐"泛型容器/动态"语义（`Vec`/`List`/`Array`）。
 
+## 数组字面量：`[...]` 与 `{...}`（括号种类即形态）
+
+除类型声明外，**字面量的括号种类**直接决定初始化的数组形态（无类型标注时的默认，layout 阶段强制）：
+
+| 字面量 | 形态 | 约束 | 例 |
+|--------|------|------|----|
+| `[1, 2, 3]` | **compact** | 元素须**定长**（同 kind、固定字节宽）；含变长字符串成员时 **layout 阶段报错** | `[10, 20, 30]`、`[true, false]` |
+| `{1, 2, 3}` | **散 key** | 变长/可增长；**字符串数组必须走这里** | `{10, 20, 30}`、`{"apple", "banana"}` |
+| `{k = v; ...}` | dict | 靠有无 `=` 键值对与散 key 数组区分 | `{ name = "x"; age = 3 }` |
+
+- **为何字符串禁入 `[...]`**：compact 把元素连续打包进单个 body，要求定长元素；变长字符串无法定长打包。`["af", "f23gw"]` 在 layout 阶段直接报错，提示改用散 key `{...}`。`[true, false, false]` 等定长元素 OK。
+- **散 key 字面量的位置约束**：`{...}` 只允许作**赋值右值** `x = {...}` 或 **for-in 源** `for (s in {...})`；其余位置（如 `f({1,2})`、`println({1,2,3})`）report error。元素不得再嵌套散 key 字面量。
+- **实现**：parser 把 `{value-list}` 产出为 `sparsearray` op，lower 的 `expand_sparse` 展开为 `set(base, "<i>", vi)`（对齐 `arr[i] <- v` 的 desugar），落散 key 元素供 `for-in`（`kvhas`/`kvat`）遍历。runtime 无改动。
+- **已知限制**：`{...}` 字面量当前仅经 `for-in` 遍历验证；对其结果做 `len(a)` / `a[i]` 随机访问尚未打通（runtime 的 for-in 与 `len`/`at` 对散 key 采用了不同的内部 key 约定，见「待定项」）。需 `len`/随机访问的数值数组请用 compact `[...]`；需要散 key 随机访问的，用 `array.scatter` 产物。
+
 ## `@`：扩展存储句柄
 
 `@` 标记"这是一个元 key 的 XValue，真实数据在扩展存储内，body 只记录位置"。
@@ -187,4 +202,5 @@ append:   arr = [10,20] (compact)  →  arr<0>=10  arr<1>=20  arr<2>=30  （自�
 - 连续多维 `[256,256]uint8` 的 row-major 排布约定（与 op-gpu tensor 连续布局对齐）。
 - `*[16]uint8`（指向连续数组的指针）的语义与跳数约定。
 - 散 key 多维数组是否支持（散 key 的 shape 语义）。
+- 散 key 内部 key 约定统一：`for-in`（`kvhas`/`kvat`）走成员式 `base.<i>`，而 `len`/`at`（`separated_*`）走 `base[<i>]` 且删 `base`——两者不互通，导致 `{...}` 字面量（成员式）无法直接 `len`/`[i]`。需收敛为单一约定后，`{...}` 才能同时支持遍历与随机访问。
 - 扩展存储句柄 body 的位置 schema（device 枚举、shm_name/offset、fd、GPU ptr 的统一编码）。
