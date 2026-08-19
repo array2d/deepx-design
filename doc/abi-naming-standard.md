@@ -20,10 +20,17 @@ kvlang 生态各组件（layout/runtime/扩展、kvspace-durable/kvspace-c）主
 
 ```
 kvspaceGetBatch          kvlangLayoutFile
-kvspaceDelTree           kvlangRuntimeExecuteVthread
-kvspaceMkindexExt        kvlangBuiltinAdd
-kvspaceXvalueNewChar     kvlangKeytreeFramePc
+kvspaceDelTree           kvlangLayoutSrc
+kvspaceMkindexExt        kvlangLayoutVet
+kvspaceXvalueNewChar     kvlangRuntimeExecuteVthread
+kvspaceNewCharByte       kvlangBuiltinAdd
+kvspaceDecodeHead        kvlangKeytreeFramePc
 ```
+
+layout 的 C ABI 三入口（`kvlang/layout/src/capi.rs`，cdylib 导出）：`kvlangLayoutFile`
+从文件、`kvlangLayoutSrc` 从内存源码串（LLM 生成即插入，不落盘）、`kvlangLayoutVet`
+只校验不写 kvspace（自造代码闸门）。`vet` 归 `Layout` 子模块前缀（`kvlangLayout<What>`），
+不另立 `kvlangVet*` 前缀。三者在 C 边界 `catch_unwind`，非法输入返回 -1 不打崩宿主。
 
 **所有 api 都加前缀，无一例外**（p2）：不再有裸 `bi_`/`kt_`/`xv_`/`kvsc_`/`xvalue_` 等自造前缀。所有函数（含内部实现）统一归入 `kvspace`/`kvlang` 二前缀，**全部保留导出**（不做 visibility 隐藏）。
 
