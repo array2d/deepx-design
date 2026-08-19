@@ -120,14 +120,14 @@ func matchShape(shape string, ndim int, dims []int32) bool {
 }
 ```
 
-`any` 是唯一简写，`kind` 走精确字符串相等。C 侧在 runtime 建等价的 `type_expr.c`（供装载期校验 + rwext 实参类型判定），Rust 侧在 `layout/src/type_expr.rs`。
+`any` 是唯一简写，`kind` 走精确字符串相等。C 侧在 runtime 建等价的 `type_expr.c`（供装载期校验 + rwirext 实参类型判定），Rust 侧在 `layout/src/type_expr.rs`。
 
 ## 七、多态派发
 
 联合/shape 声明的是「签名接受的类型集合」；运行时按**实际实参 kind + ndim + dims** 派发：
 
 - native 算子（`+`）内建多态，签名只做类型检查。
-- rwext 扩展（numpy.add）经 `kvlang_rwextResolveRead` 拿实参实际 kind，按精确 kind 分派；高维 shape 由扩展自行处理。
+- rwirext 扩展（numpy.add）经 `kvlang_rwirextResolveRead` 拿实参实际 kind，按精确 kind 分派；高维 shape 由扩展自行处理。
 - rwfunc 用户函数：并集声明接受集，函数体 `kind(x)` 分支。
 
 shape 与标量的并集（`[2,3]float32|float32`）**丢给函数自己判断**——签名只保证「实参属于声明集合」，具体语义（是矩阵还是标量）在实现侧。
@@ -146,6 +146,6 @@ shape 与标量的并集（`[2,3]float32|float32`）**丢给函数自己判断**
 
 即读参在前、写参在后，各 kindexp 逐字节等于源文法（如 `int64|float64`、`[2,3]float32`、`any...`）。命名参数→帧槽指针仍在 `/lib/<opcode>/<param>`。
 
-**native op 不落盘**：其 kindexp 内联在 runtime 的 C 注册表中，是唯一权威来源，**运行时匹配直接读 C 表，不回查 kvspace、也不镜像写入**。数值多类型算子在 C 表中**融合为单条**（如 `add(a:int64|int32|…, b:…)`），派发时由实参 kind 决定输出 kind，不再按 `<numkind>.<op>` 铺开条目。**扩展 op** 经 `kvlang_rwextRegister(opcode, nr, nw, sig)` 注册，runtime 把 `sig` 按方括号感知切分为各参 kindexp、做 `kvlang_rwextTypeValid` 校验（拒绝 `path` 等非 kind），并按上述定义体格式写入 `/lib/<opcode>`。
+**native op 不落盘**：其 kindexp 内联在 runtime 的 C 注册表中，是唯一权威来源，**运行时匹配直接读 C 表，不回查 kvspace、也不镜像写入**。数值多类型算子在 C 表中**融合为单条**（如 `add(a:int64|int32|…, b:…)`），派发时由实参 kind 决定输出 kind，不再按 `<numkind>.<op>` 铺开条目。**扩展 op** 经 `kvlang_rwirextRegister(opcode, nr, nw, sig)` 注册，runtime 把 `sig` 按方括号感知切分为各参 kindexp、做 `kvlang_rwirextTypeValid` 校验（拒绝 `path` 等非 kind），并按上述定义体格式写入 `/lib/<opcode>`。
 
-**运行时内联匹配**：execute 大循环解码指令、走到 `[n,0]` 派发前，按 opcode 从 `/lib/<opcode>` 取定义体、解出读参 kindexp，对每个已解析实参（kind/ndim/dims）跑 `kvlang_rwextTypeMatch(kindexp, …)`；变参 `...` 把尾随实参全部对末 kindexp 判定。任一失配 → `TypeError` 写 vthread 错误并停机。
+**运行时内联匹配**：execute 大循环解码指令、走到 `[n,0]` 派发前，按 opcode 从 `/lib/<opcode>` 取定义体、解出读参 kindexp，对每个已解析实参（kind/ndim/dims）跑 `kvlang_rwirextTypeMatch(kindexp, …)`；变参 `...` 把尾随实参全部对末 kindexp 判定。任一失配 → `TypeError` 写 vthread 错误并停机。

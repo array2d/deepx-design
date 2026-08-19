@@ -1,6 +1,6 @@
 # ABI 命名规范（跨组件契约）
 
-> 状态：v2 已落地（2026-08-19），两后端回归通过（见 §九）。范围：所有经 C ABI 互相链接调用的导出符号 + 各组件内部函数（全部统一前缀）。rwext 扩展宿主 `kvlang_rwext*` 仍为下划线形态，待 §八 单独统一。
+> 状态：v2 已落地（2026-08-19），两后端回归通过（见 §九）。范围：所有经 C ABI 互相链接调用的导出符号 + 各组件内部函数（全部统一前缀）。rwirext 扩展宿主 `kvlang_rwirext*` 仍为下划线形态，待 §八 单独统一。
 > 关联：kvspace 侧与 [[kvspace设计与实现]] 双向同步（p9）；kvlang 侧见 [[runtime篇-06-C运行时与后端抽象]]。
 
 kvlang 生态各组件（layout/runtime/扩展、kvspace-durable/kvspace-c）主要通过 **C ABI** 互相链接调用。本规范定义唯一的符号命名方式（p2 单一正确路径、p5 不向后兼容）。
@@ -12,7 +12,7 @@ kvlang 生态各组件（layout/runtime/扩展、kvspace-durable/kvspace-c）主
 | 前缀 | 职责域 | 实现方 |
 |------|------|--------|
 | `kvspace` | 地址空间 + KV 存取 + 索引 + watch + **值构造/TLV 编解码（原 xvalue 并入）** | kvspace-durable(Rust)、kvspace-c(C) |
-| `kvlang` | VM：编译（layout）+ 执行（runtime）+ 扩展宿主（rwext） | kvlang/layout、kvlang/runtime |
+| `kvlang` | VM：编译（layout）+ 执行（runtime）+ 扩展宿主（rwirext） | kvlang/layout、kvlang/runtime |
 
 ## 二、符号形态（唯一）
 
@@ -119,8 +119,8 @@ v1（上一版，带下划线）→ v2（无下划线 camelCase）。
 
 ## 八、延迟项（等 #5 指令）
 
-- **rwext 扩展宿主 `kvlang_rwext.h`** 的 `kvlang_rwext*` 符号**命名形态（下划线）本轮不动**，等用户单独指示如何调整。
-- 注：命名虽未动，但已按「扩展宿主自连 kvspace」的架构**裁剪 rwext 表面**——KV 存取转发函数（`Connect/Disconnect/List/Get/Set/Del/GetTlv/SetTlv/Mkindex`）及 `kvlang_rwext_t` 不透明句柄已删除；带句柄的 rwext 函数改收扩展自连的 `void *kvspace`。现存 9 符号见 [[runtime篇-06-C运行时与后端抽象]] §二。term/numpy/json 三个扩展均自 `kvspaceConnect` 拿句柄，值编解码走 `kvspaceDecodeHead`/`kvspaceTlvEncode`/`kvspaceNewChar`。
+- **rwirext 扩展宿主 `kvlang_rwirext.h`** 的 `kvlang_rwirext*` 符号**命名形态（下划线）本轮不动**，等用户单独指示如何调整。
+- 注：命名虽未动，但已按「扩展宿主自连 kvspace」的架构**裁剪 rwirext 表面**——KV 存取转发函数（`Connect/Disconnect/List/Get/Set/Del/GetTlv/SetTlv/Mkindex`）及 `kvlang_rwirext_t` 不透明句柄已删除；带句柄的 rwirext 函数改收扩展自连的 `void *kvspace`。现存 9 符号见 [[runtime篇-06-C运行时与后端抽象]] §二。term/numpy/json 三个扩展均自 `kvspaceConnect` 拿句柄，值编解码走 `kvspaceDecodeHead`/`kvspaceTlvEncode`/`kvspaceNewChar`。
 
 ## 九、验证
 

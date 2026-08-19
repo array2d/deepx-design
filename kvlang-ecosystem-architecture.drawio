@@ -29,7 +29,7 @@
         <mxCell id="n_layout" value="layout&#xa;（Rust）&#xa;编译期：parser / lower / layoutcode" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;" vertex="1" parent="tierB">
           <mxGeometry x="160" y="55" width="360" height="76" as="geometry" />
         </mxCell>
-        <mxCell id="n_runtime" value="runtime&#xa;（C）&#xa;执行期：fetch-decode-execute&#xa;对外暴露 kvlang_runtime.h + kvlang_rwext.h" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="tierB">
+        <mxCell id="n_runtime" value="runtime&#xa;（C）&#xa;执行期：fetch-decode-execute&#xa;对外暴露 kvlang_runtime.h + kvlang_rwirext.h" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="tierB">
           <mxGeometry x="680" y="45" width="360" height="90" as="geometry" />
         </mxCell>
 
@@ -71,7 +71,7 @@
           <mxGeometry x="960" y="72" width="200" height="70" as="geometry" />
         </mxCell>
 
-        <mxCell id="e_term" value="C ABI · kvlang_rwext.h&#xa;link libkvlang_runtime.so&#xa;（嵌入式 KVMODE_RETURN）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.15;entryY=0;entryDx=0;entryDy=0;labelBackgroundColor=#ffffff;fontSize=11;" edge="1" parent="1" source="n_term" target="n_runtime">
+        <mxCell id="e_term" value="C ABI · kvlang_rwirext.h&#xa;link libkvlang_runtime.so&#xa;（嵌入式 KVMODE_RETURN）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.15;entryY=0;entryDx=0;entryDy=0;labelBackgroundColor=#ffffff;fontSize=11;" edge="1" parent="1" source="n_term" target="n_runtime">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_json" value="handoff · KV .todo/.done" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;labelBackgroundColor=#ffffff;fontSize=11;" edge="1" parent="1" source="n_json" target="n_runtime">
