@@ -20,7 +20,7 @@ member_access = expr "[" index "]"                     (* 同构 XValue 数组�
               | expr "." "*" ident                     (* dict 动态成员，key 取值而非字面量 *)
 
 index          = expr                                  (* 整数类型 or 返回整数的表达式 *)
-string  = '"' { char } '"' | "'" { char } "'" | "`" { char } "`"
+string  = '"' { char } '"' | '"""' { char } '"""' | "'" { char } "'" | "`" { char } "`"
 comment = "#" { char } newline
 ```
 
