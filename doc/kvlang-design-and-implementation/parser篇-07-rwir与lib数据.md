@@ -20,7 +20,7 @@ kvlang 落在 kvspace 树上的内容，按「是否有指令体」与「是否�
 
 ## rwir：`/lib/<opcode>`
 
-**扩展 rwir**（宿主注入的非 native 算子，如 `numpy.add`）经 `rwext_register(conn, opcode, nr, nw, sig)` 写入 `/lib/<opcode>`（`<opcode>` 可带包前缀），值 `kind=rwir`、`array_len=1`，raw 即上述定义体格式；写入前对各参 kindexp 做 `type_expr_valid` 校验（拒绝 `path` 等非 kind）。**用户 rwir 声明**（kvlang 源码 `rwir myop(A:int64) -> (C:int64)`）由 layout 的 `write_rwir_decl` 同样写入 `/lib/<opcode>`。
+**扩展 rwir**（宿主注入的非 native 算子，如 `numpy.add`）经 `kvlang_rwextRegister(c, opcode, nr, nw, sig)` 写入 `/lib/<opcode>`（`<opcode>` 可带包前缀），值 `kind=rwir`、`array_len=1`，raw 即上述定义体格式；写入前对各参 kindexp 做 `kvlang_rwextTypeValid` 校验（拒绝 `path` 等非 kind）。**用户 rwir 声明**（kvlang 源码 `rwir myop(A:int64) -> (C:int64)`）由 layout 的 `write_rwir_decl` 同样写入 `/lib/<opcode>`。
 
 **native rwir** 数值多类型算子在 `builtins[]` 中**融合为单条**（如 `add` 一条覆盖 int8…float64），派发前 `strip_num_kind` 剥掉 `<numkind>.` 前缀再查表，输出 kind 由实参决定，不再按 `int64.add`/`int32.add` 铺开。
 
@@ -52,14 +52,14 @@ lib math {
 | 写 rwfunc | `write_func` → `/lib/<pkg>.<name>/`：`[0,0]` 签名（rwfunc）、`<param>` 参数 slot 指针、`[i,j]` 指令（rwir，i≥1）、`.src` 源码副本 |
 | 写用户 rwir | `write_rwir_decl` → `/lib/<opcode>`（kind=rwir，无指令体） |
 | 注册 native | runtime 静态表 `builtins[]`，不落盘 |
-| 注入扩展 rwir | 宿主 `rwext_register(opcode, nr, nw, sig)` → `/lib/<opcode>` |
+| 注入扩展 rwir | 宿主 `kvlang_rwextRegister(opcode, nr, nw, sig)` → `/lib/<opcode>` |
 
 ## 示例
 
 宿主注入扩展 rwir（各参 kindexp 以 `\n` 连接）：
 
 ```c
-rwext_register(conn, "numpy.add", 2, 1, "int64|float64\nint64|float64\nint64|float64");
+kvlang_rwextRegister(c, "numpy.add", 2, 1, "int64|float64\nint64|float64\nint64|float64");
 ```
 
 用户在 kvlang 源码声明 rwir（无体，仅签名）→ layout 落 `/lib/myop`：
@@ -77,6 +77,6 @@ rwir myop(A:int64, B:int64) -> (C:int64)
 | `layout/src/kvkind.rs` | `new_rwfunc` / `new_rwir` 定义体编码（`nr`u16 + `nw`u16 + `\n` 连接 kindexp） |
 | `runtime/src/keytree.c` | `kt_rwir(opcode)` = `/lib/<opcode>` |
 | `runtime/src/builtin.c` | native `builtins[]`（opcode→`bi_fn`，数字多类型融合）、`strip_num_kind` 派发 |
-| `runtime/src/rwext.c` | `rwext_register(opcode, nr, nw, sig)` → `/lib/<opcode>` |
+| `runtime/src/rwext.c` | `kvlang_rwextRegister(opcode, nr, nw, sig)` → `/lib/<opcode>` |
 | `runtime/src/kvcpu.c` | execute 循环 `load_def_reads` + `check_read_types` 内联类型匹配 |
-| `runtime/src/type_expr.c` | `type_expr_valid`（装载校验）+ `type_expr_match`（运行时匹配） |
+| `runtime/src/type_expr.c` | `kvlang_rwextTypeValid`（装载校验）+ `kvlang_rwextTypeMatch`（运行时匹配） |
