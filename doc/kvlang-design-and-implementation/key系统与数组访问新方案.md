@@ -28,19 +28,19 @@ kvspace 的树形 key 与 XValue 的 kindexp 共用一套分隔符语义，每�
 
 ## kvspace-go 的索引目录符号：`<` 与 `,`
 
-kvspace-go 路径系统现有 `/`（层级目录）与 `.`（成员目录）两个索引目录符号。散 key 数组的元素 key 用 `<i>` 后缀（`arr<0>`、`arr<1>`）作为**内部命名**——这是后端存储约定，不是用户语法；用户访问统一写 `arr[i]`（parser desugar 为 `at`）。`[]` 不是索引符号——compact 数组打包在一个 body，无 key 族。
+kvspace-go 路径系统现有 `/`（层级目录）与 `.`（成员目录）两个索引目录符号。散 key 数组的元素 key 用 `.i` 后缀（`arr.0`、`arr.1`）作为**内部命名**——这是后端存储约定，不是用户语法；用户访问统一写 `arr[i]`（parser desugar 为 `at`）。`[]` 不是索引符号——compact 数组打包在一个 body，无 key 族。
 
 | 符号 | 位置 | 语义 | 后端处理 |
 |------|------|------|---------|
 | `/` | 后缀 | 层级目录 | `Index`(children) 路由 |
 | `.` | 后缀 | 成员目录 | `DictIndex`(children) 路由 |
-| `<` `>` | 内部后缀 | 散 key 数组元素 key 命名 | `arr<i>` 定位元素 key |
+| `.` | 内部后缀 | 散 key 数组元素 key 命名 | `arr.i` 定位元素 key |
 
-- `arr<3>` = 散 key 数组的内部元素 key（存储层），用户写 `arr[3]`。
+- `arr.3` = 散 key 数组的内部元素 key（存储层），用户写 `arr[3]`。
 - 后端 `SplitArrayParent` 一步拆出 `(base, index)` 并定位 key，语言层 `at` 不再做路径拼接/解析。
 
 **后端改动**：
-- `SplitArrayParent`（对标 `SplitDictParent`）：检测 `arr<i>`，拆成 (arrayBase, index)。
+- `SplitArrayParent`（对标 `SplitDictParent`）：检测 `arr.i`，拆成 (arrayBase, index)。
 - `validateIndexChild` 已允许 `<` `>`（字面量）；`isDir`/`parentName` 无需改动。
 - 散 key 数组 `List` 返回元素 key 列表。
 
@@ -75,18 +75,18 @@ kind    ::= uint8 | int8 | int16 | uint16 | int32 | uint32 | int64 | uint64
 
 ## `[]`：一种访问语法，两种存储形态
 
-同一个"数组"概念，两种存储形态，**访问语法统一为 `arr[i]`**（不再有 `<i>`）：
+同一个"数组"概念，两种存储形态，**访问语法统一为 `arr[i]`**：
 
 | 写法 | 存储形态 | 元素位置 | XValue 数 | 判定 |
 |------|---------|---------|----------|------|
 | `int32` | 标量 | — | 1 | — |
 | `[10]int32` | **compact**（定长） | 连续打包在一个 body | **1** | 类型标注定长 |
 | `[]int32 = [1,2,3]` | **compact**（字面量定长） | 连续打包在一个 body | **1** | 字面量初始化 |
-| `[]int32`（裸声明） | **散 key**（变长） | `arr<0>`… 各自 key | N+1 | 无字面量 / append 增长 |
+| `[]int32`（裸声明） | **散 key**（变长） | `arr.0`… 各自 key | N+1 | 无字面量 / append 增长 |
 | `[256,256]uint8` | compact 多维数组 | 连续打包在一个 body | **1** | 类型标注定长 |
 
 - **compact**：`[N]T` 或字面量初始化 `[]T = [...]`——元素连续打包在一个 XValue，`raw_len = ∏dims × ElemSize`。对齐 C `int[10]`、Go `[10]int`、Rust `[i32;10]`。
-- **散 key**：裸声明 `[]T`（无字面量）或 `array.append`/`array.slice` 触发——元素分散在 `arr<0>..arr<N-1>` 各 key。对齐"泛型容器/动态"语义（`Vec`/`List`/`Array`）。
+- **散 key**：裸声明 `[]T`（无字面量）或 `array.append`/`array.slice` 触发——元素分散在 `arr.0..arr.N-1` 各 key。对齐"泛型容器/动态"语义（`Vec`/`List`/`Array`）。
 
 ## 数组字面量：`[...]` 与 `{...}`（括号种类即形态）
 
@@ -100,7 +100,7 @@ kind    ::= uint8 | int8 | int16 | uint16 | int32 | uint32 | int64 | uint64
 
 - **为何字符串禁入 `[...]`**：compact 把元素连续打包进单个 body，要求定长元素；变长字符串无法定长打包。`["af", "f23gw"]` 在 layout 阶段直接报错，提示改用散 key `{...}`。`[true, false, false]` 等定长元素 OK。
 - **散 key 字面量的位置约束**：`{...}` 只允许作**赋值右值** `x = {...}` 或 **for-in 源** `for (s in {...})`；其余位置（如 `f({1,2})`、`println({1,2,3})`）report error。元素不得再嵌套散 key 字面量。
-- **实现**：parser 把 `{value-list}` 产出为 `sparsearray` op，lower 的 `expand_sparse` 展开为 `set(base, "<i>", vi)`（对齐 `arr[i] <- v` 的 desugar），落散 key 元素供 `for-in`（`kvhas`/`kvat`）遍历。runtime 无改动。
+- **实现**：parser 把 `{value-list}` 产出为 `sparsearray` op，lower 的 `expand_sparse` 展开为 `set(base, ".i", vi)`（对齐 `arr[i] <- v` 的 desugar），落散 key 元素供 `for-in`（`kvhas`/`kvat`）遍历。runtime 无改动。
 - **已知限制**：`{...}` 字面量当前仅经 `for-in` 遍历验证；对其结果做 `len(a)` / `a[i]` 随机访问尚未打通（runtime 的 for-in 与 `len`/`at` 对散 key 采用了不同的内部 key 约定，见「待定项」）。需 `len`/随机访问的数值数组请用 compact `[...]`；需要散 key 随机访问的，用 `array.scatter` 产物。
 
 ## `@`：扩展存储句柄
@@ -147,7 +147,7 @@ body        =  [M B raw]        M = raw_len，offset = HeadLen()
 - 内联标量/连续数组（ref=0）：body = 类型化数据（`[10]int32` 的 body = 40B 连续元素）。
 - 软链接（ref=`*`）：body = 目标 key 路径字符串。
 - 扩展句柄（ref=`@`）：body = 位置描述符（device + address）。
-- 散 key 数组（arr_flag=2）：body = arraykey 描述符（可空），元素在 `arr<0..>` 各 key。
+- 散 key 数组（arr_flag=2）：body = arraykey 描述符（可空），元素在 `arr.0..` 各 key。
 
 派生字段：`isptr=(ref==1)`、`isext=(ref==2)`、`arraylength = ∏dims`（定长）/ 0（变长）/ 1（标量）。
 
@@ -180,21 +180,21 @@ kindexp 把形态显式化后，XValue 的存取约束随之收紧为**整存整
 
 | rwir | 方向 | 语义 |
 |------|------|------|
-| `array.scatter(arr) -> dst` | compact → 散 key | 连续数组 `arr`（一个 packed body）拆成 `dst<0>..dst<N-1>` 标量 key，不动 `arr` |
-| `array.compact(arr) -> dst` | 散 key → compact | 读 `arr<0>..arr<N-1>`（顺读到缺席）打包成连续数组 `dst`，不动 `arr` |
+| `array.scatter(arr) -> dst` | compact → 散 key | 连续数组 `arr`（一个 packed body）拆成 `dst.0..dst.N-1` 标量 key，不动 `arr` |
+| `array.compact(arr) -> dst` | 散 key → compact | 读 `arr.0..arr.N-1`（顺读到缺席）打包成连续数组 `dst`，不动 `arr` |
 | `array.append(arr, elem) -> arr` | 变长 +1 | 追加 `elem`；若 `arr` 为 compact 先自动 scatter |
 | `array.slice(arr, lo, hi) -> arr` | 变长截取 | 切片 `arr[lo:hi]`；若 `arr` 为 compact 先自动 scatter |
 
 ```
-scatter:  arr = [10,20,30]         →  dst<0>=10  dst<1>=20  dst<2>=30  （arr 不动）
-compact:  dst<0>=10 … dst<2>=30   →  dst = [10,20,30]                   （item key 不动）
-append:   arr = [10,20] (compact)  →  arr<0>=10  arr<1>=20  arr<2>=30  （自动 scatter）
+scatter:  arr = [10,20,30]         →  dst.0=10  dst.1=20  dst.2=30  （arr 不动）
+compact:  dst.0=10 … dst.2=30   →  dst = [10,20,30]                   （item key 不动）
+append:   arr = [10,20] (compact)  →  arr.0=10  arr.1=20  arr.2=30  （自动 scatter）
 ```
 
 - item key 命名 `base + "<" + i + ">"`（散 key 内部实现，一等索引目录符号落地前是普通 key）。
 - 长度：`scatter` 由 `arr.ArrayLen()` 定；`compact`/`append`/`slice` 由顺读 item key 到缺席定（dense 散 key）。
 - 同构铁律：`compact` 以首个元素 kind 打包，其余元素须同 kind（`packTypedArray` 拒绝混合）。
-- 自动 scatter：`array.append`/`array.slice` 这类改长度的方法，遇 compact 数组先就地 scatter（写 `arr<0>..arr<N-1>`、删 `arr`）再操作。
+- 自动 scatter：`array.append`/`array.slice` 这类改长度的方法，遇 compact 数组先就地 scatter（写 `arr.0..arr.N-1`、删 `arr`）再操作。
 
 ## 待定项
 
@@ -202,5 +202,5 @@ append:   arr = [10,20] (compact)  →  arr<0>=10  arr<1>=20  arr<2>=30  （自�
 - 连续多维 `[256,256]uint8` 的 row-major 排布约定（与 op-gpu tensor 连续布局对齐）。
 - `*[16]uint8`（指向连续数组的指针）的语义与跳数约定。
 - 散 key 多维数组是否支持（散 key 的 shape 语义）。
-- 散 key 内部 key 约定统一：`for-in`（`kvhas`/`kvat`）走成员式 `base.<i>`，而 `len`/`at`（`separated_*`）走 `base[<i>]` 且删 `base`——两者不互通，导致 `{...}` 字面量（成员式）无法直接 `len`/`[i]`。需收敛为单一约定后，`{...}` 才能同时支持遍历与随机访问。
+- 散 key 内部 key 约定统一：`for-in`（`kvhas`/`kvat`）走成员式 `base.i`，而 `len`/`at`（`separated_*`）走 `base[i]` 且删 `base`——两者不互通，导致 `{...}` 字面量（成员式）无法直接 `len`/`[i]`。需收敛为单一约定后，`{...}` 才能同时支持遍历与随机访问。
 - 扩展存储句柄 body 的位置 schema（device 枚举、shm_name/offset、fd、GPU ptr 的统一编码）。
